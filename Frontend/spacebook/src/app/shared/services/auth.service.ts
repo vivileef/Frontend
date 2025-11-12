@@ -9,9 +9,21 @@ export interface UserProfile {
   role?: string | null;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+// Custom storage adapter sin locks - implementación sincrónica
+class CustomStorage {
+  getItem(key: string): string | null {
+    return sessionStorage.getItem(key);
+  }
+
+  setItem(key: string, value: string): void {
+    sessionStorage.setItem(key, value);
+  }
+
+  removeItem(key: string): void {
+    sessionStorage.removeItem(key);
+  }
+}
+
 export class Auth {
   private supabase: SupabaseClient;
   // Señal con la sesión actual (null si no hay sesión)
@@ -20,9 +32,43 @@ export class Auth {
   public profile: WritableSignal<UserProfile | null>;
 
   constructor() {
-    this.supabase = createClient(environment.apiUrl, environment.apiKey);
+    // Limpiar cualquier sesión previa problemática
+    this.clearSupabaseStorage();
+
+    this.supabase = createClient(environment.apiUrl, environment.apiKey, {
+      auth: {
+        storage: new CustomStorage() as any,
+        storageKey: 'spacebook-auth',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false
+      }
+    });
+
     this.session = signal<Session | null>(null);
     this.profile = signal<UserProfile | null>(null);
+
+    // Inicializar sesión desde el cliente (si existe)
+    this.getSession().catch(() => {});
+  }
+
+  private clearSupabaseStorage() {
+    try {
+      // Limpiar localStorage
+      Object.keys(localStorage).forEach(key => {
+        if (key.includes('supabase') || key.includes('sb-')) {
+          localStorage.removeItem(key);
+        }
+      });
+      // Limpiar sessionStorage
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.includes('supabase') || key.includes('sb-')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+    } catch (error) {
+      console.error('Error clearing storage:', error);
+    }
   }
 
   // Registrar usuario
