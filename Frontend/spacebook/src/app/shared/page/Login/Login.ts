@@ -31,8 +31,14 @@ export class Login {
         if (res?.error) {
           this.errorMessage.set(res.error.message || 'Error al iniciar sesión');
       } else {
-        // Inicio de sesión correcto; navegar al dashboard (o ruta raíz)
-        await this.router.navigate(['/']);
+        // Inicio de sesión correcto; redirigir según el rol
+        if (this.auth.isAdmin()) {
+          console.log('Redirigiendo a admin dashboard');
+          await this.router.navigate(['/admin-dashboard']);
+        } else {
+          console.log('Redirigiendo a user dashboard');
+          await this.router.navigate(['/user-dashboard']);
+        }
       }
     } catch (e: any) {
       this.errorMessage.set(e?.message || 'Error al iniciar sesión');

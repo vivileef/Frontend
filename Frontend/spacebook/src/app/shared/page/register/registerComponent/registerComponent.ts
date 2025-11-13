@@ -18,9 +18,12 @@ export class RegisterComponent {
   errorMessage = signal('');
   
   registerForm = new FormGroup({
-    email: new FormControl<string>('', [Validators.required, Validators.email]),
-    name: new FormControl<string>('', [Validators.required, Validators.minLength(2)]),
-    password: new FormControl<string>('', [Validators.required, Validators.minLength(6)]),
+    nombre: new FormControl<string>('', [Validators.required, Validators.minLength(2)]),
+    apellido: new FormControl<string>('', [Validators.required, Validators.minLength(2)]),
+    correo: new FormControl<string>('', [Validators.required, Validators.email]),
+    cedula: new FormControl<number | null>(null, [Validators.required]),
+    telefono: new FormControl<number | null>(null, [Validators.required]),
+    contrasena: new FormControl<string>('', [Validators.required, Validators.minLength(6)]),
   });
   
   async onSubmit() {
@@ -35,18 +38,23 @@ export class RegisterComponent {
     
     try {
       await this.authService.signUp(
-        this.registerForm.value.email!,
-        this.registerForm.value.password!,
-        { name: this.registerForm.value.name! }
+        this.registerForm.value.correo!,
+        this.registerForm.value.contrasena!,
+        {
+          nombre: this.registerForm.value.nombre!,
+          apellido: this.registerForm.value.apellido!,
+          cedula: this.registerForm.value.cedula!,
+          telefono: this.registerForm.value.telefono!
+        }
       );
 
-      console.log('User registered successfully');
+      console.log('Usuario registrado exitosamente');
       // Esperar un poco antes de redirigir
       setTimeout(() => {
         this.router.navigate(['/login']);
       }, 500);
     } catch (error: any) {
-      console.error('Error registering user:', error);
+      console.error('Error al registrar usuario:', error);
       this.errorMessage.set(error.message || 'Error al registrar usuario');
     } finally {
       // Volver a habilitar el botón después de 2 segundos

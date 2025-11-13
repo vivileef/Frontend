@@ -3,10 +3,24 @@ import { createClient, SupabaseClient, AuthChangeEvent, Session } from '@supabas
 import { environment } from '../../../environments/environment';
 
 export interface UserProfile {
-  id: string;
-  email?: string | null;
-  name?: string | null;
-  role?: string | null;
+  usuarioid: string;
+  nombre: string;
+  apellido: string;
+  correo: string;
+  cedula: number;
+  telefono: number;
+  fechacreacion?: string;
+  isAdmin?: boolean;
+}
+
+export interface AdminProfile {
+  adminid: string;
+  nombre: string;
+  apellido: string;
+  correo: string;
+  contrasena: string;
+  cedula: number;
+  telefono: number;
 }
 
 // Custom storage adapter sin locks - implementación sincrónica
@@ -30,6 +44,11 @@ export class Auth {
   public session: WritableSignal<Session | null>;
   // Señal con el perfil del usuario autenticado (null si no existe)
   public profile: WritableSignal<UserProfile | null>;
+  // Correos de administradores
+  private readonly ADMIN_EMAILS = [
+    'stalin2005tumbaco@gmail.com',
+    'giorno2005@outlook.es'
+  ];
 
   constructor() {
     // Limpiar cualquier sesión previa problemática
@@ -72,28 +91,64 @@ export class Auth {
   }
 
   // Registrar usuario
-  async signUp(email: string, password: string, profile?: { name?: string; role?: string }) {
-    const { data, error } = await this.supabase.auth.signUp({ email, password });
+  async signUp(
+    email: string, 
+    password: string, 
+    userData: { 
+      nombre: string; 
+      apellido: string; 
+      cedula: number; 
+      telefono: number; 
+    }
+  ) {
+    // 1. Crear usuario en Supabase Auth
+    const { data, error } = await this.supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        data: {
+          nombre: userData.nombre,
+          apellido: userData.apellido
+        }
+      }
+    });
+    
     if (error) throw error;
 
-    // si se creó el usuario en Auth, intentamos crear/upsert el perfil en la tabla `usuario`
-    const userId = (data as any)?.user?.id ?? (data as any)?.user?.id;
+    // 2. Insertar en la tabla usuarios
+    const userId = data?.user?.id;
     if (userId) {
-      const profileRow: any = {
-        id: userId,
-        email,
-        name: profile?.name ?? null,
-        role: profile?.role ?? 'user',
+      const usuarioData = {
+        usuarioid: userId,
+        nombre: userData.nombre,
+        apellido: userData.apellido,
+        correo: email,
+        cedula: userData.cedula,
+        telefono: userData.telefono,
+        contrasena: '', // No guardamos la contraseña en texto plano
+        fechacreacion: new Date().toISOString()
       };
 
-      // upsert el perfil (crea o actualiza)
-      const res = await this.supabase.from('usuario').upsert(profileRow, { onConflict: 'id' });
-      if ((res as any).error) {
-        // no hacemos rollback del auth user, pero informamos del error
-        throw (res as any).error;
+      // Insertar en la tabla usuarios
+      const { error: insertError } = await this.supabase
+        .from('usuarios')
+        .insert([usuarioData]);
+
+      if (insertError) {
+        console.error('Error al insertar en tabla usuarios:', insertError);
+        throw insertError;
       }
-      // actualizar señal local
-      this.profile.set(profileRow as UserProfile);
+
+      // Actualizar señal local con el perfil
+      this.profile.set({
+        usuarioid: userId,
+        nombre: userData.nombre,
+        apellido: userData.apellido,
+        correo: email,
+        cedula: userData.cedula,
+        telefono: userData.telefono,
+        fechacreacion: usuarioData.fechacreacion
+      });
     }
 
     return data;
@@ -103,18 +158,45 @@ export class Auth {
   async signIn(email: string, password: string) {
     const { data, error } = await this.supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    
     // Guardar sesión en la señal
-    this.session.set((data as any)?.session ?? null);
+    this.session.set(data?.session ?? null);
 
-    // cargar perfil desde tabla `usuario` si existe
-    const userId = (data as any)?.user?.id ?? (data as any)?.session?.user?.id;
+    // Verificar si es administrador
+    const isAdmin = this.isAdminEmail(email);
+
+    // Cargar perfil desde la tabla correspondiente
+    const userId = data?.user?.id ?? data?.session?.user?.id;
     if (userId) {
-      const profileRes = await this.getProfile(userId);
-      if (!(profileRes as any).error) {
-        this.profile.set((profileRes as any).data as UserProfile);
+      if (isAdmin) {
+        // Buscar en tabla administrador
+        const adminRes = await this.getAdminProfile(email);
+        if (!(adminRes as any).error && (adminRes as any).data) {
+          const adminData = (adminRes as any).data as AdminProfile;
+          // Convertir a UserProfile con flag de admin
+          this.profile.set({
+            usuarioid: adminData.adminid,
+            nombre: adminData.nombre,
+            apellido: adminData.apellido,
+            correo: adminData.correo,
+            cedula: adminData.cedula,
+            telefono: adminData.telefono,
+            isAdmin: true
+          });
+        }
       } else {
-        // si no hay perfil, limpiar
-        this.profile.set(null);
+        // Buscar en tabla usuarios
+        const profileRes = await this.getProfile(userId);
+        if (!(profileRes as any).error && (profileRes as any).data) {
+          const userData = (profileRes as any).data as UserProfile;
+          this.profile.set({
+            ...userData,
+            isAdmin: false
+          });
+        } else {
+          console.warn('Usuario sin registro en tabla usuarios');
+          this.profile.set(null);
+        }
       }
     }
     return data;
@@ -140,11 +222,16 @@ export class Auth {
     return this.supabase.auth.onAuthStateChange((event, session) => {
       // Actualizar señal local
       this.session.set(session as Session | null);
-      // si hay sesión, intentar cargar perfil
-      const userId = (session as any)?.user?.id ?? null;
+      
+      // Si hay sesión, intentar cargar perfil desde tabla usuarios
+      const userId = session?.user?.id ?? null;
       if (userId) {
         this.getProfile(userId).then((r) => {
-          if (!(r as any).error) this.profile.set((r as any).data as UserProfile);
+          if (!(r as any).error && (r as any).data) {
+            this.profile.set((r as any).data as UserProfile);
+          } else {
+            this.profile.set(null);
+          }
         }).catch(() => this.profile.set(null));
       } else {
         this.profile.set(null);
@@ -158,13 +245,28 @@ export class Auth {
     return this.session()?.access_token ?? null;
   }
 
-  // Obtener perfil desde la tabla `usuario`
+  // Obtener perfil desde la tabla `usuarios`
   async getProfile(userId: string) {
-    return this.supabase.from('usuario').select('*').eq('id', userId).single();
+    return this.supabase.from('usuarios').select('*').eq('usuarioid', userId).single();
+  }
+
+  // Obtener perfil de administrador
+  async getAdminProfile(email: string) {
+    return this.supabase.from('administrador').select('*').eq('correo', email).single();
+  }
+
+  // Verificar si un correo es de administrador
+  isAdminEmail(email: string): boolean {
+    return this.ADMIN_EMAILS.includes(email.toLowerCase());
+  }
+
+  // Verificar si el usuario actual es admin
+  isAdmin(): boolean {
+    return this.profile()?.isAdmin ?? false;
   }
 
   // Actualizar perfil
   async updateProfile(userId: string, attrs: Partial<UserProfile>) {
-    return this.supabase.from('usuario').update(attrs).eq('id', userId);
+    return this.supabase.from('usuarios').update(attrs).eq('usuarioid', userId);
   }
 }
