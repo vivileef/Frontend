@@ -1,6 +1,43 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { environment } from '../../../../../environments/environment';
+
+// Interfaces de Base de Datos
+interface Institucion {
+  institucionid: string;
+  nombre: string;
+  tipo: string;
+  direccion: string;
+  servicio: string;
+  horarioid?: string;
+}
+
+interface Seccion {
+  seccionid: string;
+  institucionid: string;
+  nombre: string;
+  tipo: string;
+  capacidad: number;
+  calificacion: number;
+}
+
+interface Espacio {
+  espacioid: string;
+  seccionid: string;
+  nombre: string;
+  estado: boolean;
+  reservaid?: string;
+}
+
+interface Reserva {
+  reservaid: string;
+  usuarioid: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  costo: number;
+}
 
 interface CalendarDay {
   date: number;
@@ -15,6 +52,7 @@ interface CalendarEvent {
   time: string;
   status: 'occupied' | 'available';
   title: string;
+  reserva?: Reserva;
 }
 
 @Component({
@@ -25,115 +63,34 @@ interface CalendarEvent {
   styleUrls: ['./visualizacion-disponibilidad.css']
 })
 export class VisualizacionDisponibilidadComponent implements OnInit {
+  private supabase: SupabaseClient;
+
   // Datos de contexto
-  selectedInstitution = 'Universidad Nacional de Colombia';
-  selectedSection = 'Auditorios';
-  selectedSpace = 'Auditorio Principal';
+  selectedInstitution = '';
+  selectedSection = '';
+  selectedSpace = '';
+  selectedInstitutionId = '';
+  selectedSectionId = '';
+  selectedSpaceId = '';
 
-  // Estructura completa de instituciones con secciones y espacios
-  institutions = [
-    {
-      id: 1,
-      name: 'Universidad Nacional de Colombia',
-      sections: [
-        {
-          id: 1,
-          name: 'Auditorios',
-          count: 3,
-          spaces: [
-            { id: 1, name: 'Auditorio Principal', capacity: 500, type: 'Auditorio' },
-            { id: 2, name: 'Auditorio 2', capacity: 300, type: 'Auditorio' },
-            { id: 3, name: 'Auditorio 3', capacity: 200, type: 'Auditorio' }
-          ]
-        },
-        {
-          id: 2,
-          name: 'Aulas',
-          count: 15,
-          spaces: [
-            { id: 4, name: 'Aula 101', capacity: 40, type: 'Aula' },
-            { id: 5, name: 'Aula 102', capacity: 40, type: 'Aula' },
-            { id: 6, name: 'Aula 201', capacity: 50, type: 'Aula' }
-          ]
-        },
-        {
-          id: 3,
-          name: 'Laboratorios',
-          count: 8,
-          spaces: [
-            { id: 7, name: 'Lab Química', capacity: 30, type: 'Laboratorio' },
-            { id: 8, name: 'Lab Física', capacity: 30, type: 'Laboratorio' },
-            { id: 9, name: 'Lab Biología', capacity: 25, type: 'Laboratorio' }
-          ]
-        },
-        {
-          id: 4,
-          name: 'Salas de Reunión',
-          count: 5,
-          spaces: [
-            { id: 10, name: 'Sala Junta Directiva', capacity: 20, type: 'Sala' },
-            { id: 11, name: 'Sala Ejecutiva', capacity: 15, type: 'Sala' },
-            { id: 12, name: 'Sala Conferencias', capacity: 50, type: 'Sala' }
-          ]
-        }
-      ]
-    },
-    {
-      id: 2,
-      name: 'Colegio Técnico',
-      sections: [
-        {
-          id: 5,
-          name: 'Aulas',
-          count: 20,
-          spaces: [
-            { id: 13, name: 'Aula A', capacity: 35, type: 'Aula' },
-            { id: 14, name: 'Aula B', capacity: 35, type: 'Aula' },
-            { id: 15, name: 'Aula C', capacity: 40, type: 'Aula' }
-          ]
-        },
-        {
-          id: 6,
-          name: 'Talleres',
-          count: 10,
-          spaces: [
-            { id: 16, name: 'Taller Mecánica', capacity: 20, type: 'Taller' },
-            { id: 17, name: 'Taller Electricidad', capacity: 20, type: 'Taller' },
-            { id: 18, name: 'Taller Electrónica', capacity: 25, type: 'Taller' }
-          ]
-        }
-      ]
-    },
-    {
-      id: 3,
-      name: 'Centro Empresarial',
-      sections: [
-        {
-          id: 7,
-          name: 'Oficinas',
-          count: 15,
-          spaces: [
-            { id: 19, name: 'Oficina 101', capacity: 5, type: 'Oficina' },
-            { id: 20, name: 'Oficina 102', capacity: 5, type: 'Oficina' },
-            { id: 21, name: 'Oficina 201', capacity: 8, type: 'Oficina' }
-          ]
-        },
-        {
-          id: 8,
-          name: 'Salas de Conferencia',
-          count: 6,
-          spaces: [
-            { id: 22, name: 'Sala Ejecutiva', capacity: 30, type: 'Sala' },
-            { id: 23, name: 'Sala Negocios', capacity: 25, type: 'Sala' },
-            { id: 24, name: 'Sala Capacitación', capacity: 50, type: 'Sala' }
-          ]
-        }
-      ]
-    }
-  ];
+  // Datos desde Supabase
+  instituciones = signal<Institucion[]>([]);
+  secciones = signal<Seccion[]>([]);
+  espacios = signal<Espacio[]>([]);
+  reservas = signal<Reserva[]>([]);
+  
+  // Estados
+  cargando = signal<boolean>(false);
+  error = signal<string>('');
 
+  // Estructura para el dropdown (compatible con el template actual)
+  institutions: any[] = [];
   sections: any[] = [];
   spaces: any[] = [];
+
+  constructor() {
+    this.supabase = createClient(environment.apiUrl, environment.apiKey);
+  }
 
   // Calendario
   currentDate: Date = new Date();
@@ -169,28 +126,175 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
   );
 
   ngOnInit(): void {
-    this.loadInstitutionData();
+    this.cargarInstituciones();
     this.generateCalendar();
   }
 
-  loadInstitutionData(): void {
-    const institution = this.institutions.find(inst => inst.name === this.selectedInstitution);
-    if (institution) {
-      this.sections = institution.sections;
-      const firstSection = this.sections[0];
-      if (firstSection) {
-        this.selectedSection = firstSection.name;
-        this.spaces = firstSection.spaces;
-        if (this.spaces.length > 0) {
-          this.selectSpace(this.spaces[0]);
-        }
+  // ==================== CARGAR DATOS DESDE SUPABASE ====================
+  async cargarInstituciones() {
+    try {
+      this.cargando.set(true);
+      this.error.set('');
+
+      const { data, error } = await this.supabase
+        .from('institucion')
+        .select('*')
+        .order('nombre', { ascending: true });
+
+      if (error) throw error;
+
+      this.instituciones.set(data || []);
+      
+      // Transformar a formato compatible con template
+      this.institutions = (data || []).map((inst: Institucion) => ({
+        id: inst.institucionid,
+        name: inst.nombre,
+        sections: [] // Se cargarán cuando se seleccione
+      }));
+
+      // Seleccionar primera institución si existe
+      if (this.institutions.length > 0) {
+        await this.selectInstitution(this.institutions[0]);
       }
+    } catch (error: any) {
+      this.error.set('Error al cargar instituciones: ' + error.message);
+      console.error('Error:', error);
+    } finally {
+      this.cargando.set(false);
     }
   }
 
-  selectInstitution(institution: any): void {
-    this.selectedInstitution = institution.name;
-    this.loadInstitutionData();
+  async cargarSecciones(institucionId: string) {
+    try {
+      this.cargando.set(true);
+
+      const { data, error } = await this.supabase
+        .from('seccion')
+        .select('*')
+        .eq('institucionid', institucionId)
+        .order('nombre', { ascending: true });
+
+      if (error) throw error;
+
+      this.secciones.set(data || []);
+      
+      // Transformar a formato compatible con template
+      this.sections = (data || []).map((sec: Seccion) => ({
+        id: sec.seccionid,
+        name: sec.nombre,
+        count: 0, // Se actualizará al contar espacios
+        spaces: []
+      }));
+
+      // Cargar espacios para cada sección
+      for (const section of this.sections) {
+        await this.cargarEspaciosParaSeccion(section.id);
+      }
+
+      // Seleccionar primera sección si existe
+      if (this.sections.length > 0) {
+        await this.selectSection(this.sections[0]);
+      }
+    } catch (error: any) {
+      this.error.set('Error al cargar secciones: ' + error.message);
+      console.error('Error:', error);
+    } finally {
+      this.cargando.set(false);
+    }
+  }
+
+  async cargarEspaciosParaSeccion(seccionId: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from('espacio')
+        .select('*')
+        .eq('seccionid', seccionId)
+        .order('nombre', { ascending: true });
+
+      if (error) throw error;
+
+      const section = this.sections.find(s => s.id === seccionId);
+      if (section) {
+        section.spaces = (data || []).map((esp: Espacio) => ({
+          id: esp.espacioid,
+          name: esp.nombre,
+          capacity: 0, // No tenemos capacidad en la tabla espacio
+          type: '' // Podemos obtenerlo de la sección
+        }));
+        section.count = section.spaces.length;
+      }
+    } catch (error: any) {
+      console.error('Error al cargar espacios:', error);
+    }
+  }
+
+  async cargarReservasDelEspacio(espacioId: string) {
+    try {
+      this.cargando.set(true);
+
+      // Obtener el espacio con su reserva actual
+      const { data: espacioData, error: espacioError } = await this.supabase
+        .from('espacio')
+        .select('reservaid')
+        .eq('espacioid', espacioId)
+        .single();
+
+      if (espacioError) throw espacioError;
+
+      if (espacioData?.reservaid) {
+        // Cargar la reserva
+        const { data: reservaData, error: reservaError } = await this.supabase
+          .from('reserva')
+          .select('*')
+          .eq('reservaid', espacioData.reservaid)
+          .single();
+
+        if (!reservaError && reservaData) {
+          this.reservas.set([reservaData]);
+          this.actualizarCalendarioConReservas([reservaData]);
+        }
+      } else {
+        this.reservas.set([]);
+        this.generateCalendar(); // Regenerar sin reservas
+      }
+    } catch (error: any) {
+      this.error.set('Error al cargar reservas: ' + error.message);
+      console.error('Error:', error);
+    } finally {
+      this.cargando.set(false);
+    }
+  }
+
+  actualizarCalendarioConReservas(reservas: Reserva[]) {
+    // Limpiar eventos existentes
+    this.calendarDays.forEach(day => {
+      day.events = [];
+    });
+
+    // Agregar eventos desde reservas
+    reservas.forEach(reserva => {
+      const fechaInicio = new Date(reserva.fecha_inicio);
+      const fechaFin = reserva.fecha_fin ? new Date(reserva.fecha_fin) : fechaInicio;
+
+      // Encontrar el día en el calendario
+      const dayIndex = this.calendarDays.findIndex(
+        d => d.date === fechaInicio.getDate() &&
+             d.month === fechaInicio.getMonth() &&
+             d.year === fechaInicio.getFullYear()
+      );
+
+      if (dayIndex !== -1) {
+        const horaInicio = fechaInicio.toTimeString().slice(0, 5);
+        const horaFin = fechaFin.toTimeString().slice(0, 5);
+
+        this.calendarDays[dayIndex].events.push({
+          time: `${horaInicio}-${horaFin}`,
+          status: 'occupied',
+          title: 'Reservado',
+          reserva: reserva
+        });
+      }
+    });
   }
 
   generateCalendar(): void {
@@ -251,24 +355,9 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
   }
 
   generateDayEvents(dayOfMonth: number): CalendarEvent[] {
-    // Simular eventos estáticos para ciertos días
-    const eventMap: { [key: number]: CalendarEvent[] } = {
-      1: [{ time: '10:00-12:00', status: 'occupied', title: 'Reunión' }],
-      5: [{ time: '14:00-16:00', status: 'occupied', title: 'Conferencia' }],
-      10: [
-        { time: '09:00-11:00', status: 'occupied', title: 'Clase' },
-        { time: '14:00-16:00', status: 'available', title: 'Disponible' }
-      ],
-      15: [{ time: '11:00-13:00', status: 'occupied', title: 'Evento' }],
-      20: [{ time: '15:00-17:00', status: 'available', title: 'Disponible' }],
-      25: [
-        { time: '08:00-10:00', status: 'occupied', title: 'Capacitación' },
-        { time: '10:30-12:30', status: 'occupied', title: 'Reunión' }
-      ],
-      28: [{ time: '13:00-15:00', status: 'available', title: 'Disponible' }]
-    };
-
-    return eventMap[dayOfMonth] || [];
+    // Los eventos reales se cargarán desde las reservas
+    // Este método se mantiene para compatibilidad pero retorna vacío
+    return [];
   }
 
   previousMonth(): void {
@@ -277,6 +366,10 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
       this.currentDate.getMonth() - 1
     );
     this.generateCalendar();
+    // Recargar reservas si hay un espacio seleccionado
+    if (this.selectedSpaceId) {
+      this.cargarReservasDelEspacio(this.selectedSpaceId);
+    }
   }
 
   nextMonth(): void {
@@ -285,21 +378,39 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
       this.currentDate.getMonth() + 1
     );
     this.generateCalendar();
-  }
-
-  selectSection(section: any): void {
-    this.selectedSection = section.name;
-    this.spaces = section.spaces;
-    if (this.spaces.length > 0) {
-      this.selectSpace(this.spaces[0]);
+    // Recargar reservas si hay un espacio seleccionado
+    if (this.selectedSpaceId) {
+      this.cargarReservasDelEspacio(this.selectedSpaceId);
     }
   }
 
-  selectSpace(space: any): void {
+  // ==================== NAVEGACIÓN Y SELECCIÓN ====================
+  async selectInstitution(institution: any): Promise<void> {
+    this.selectedInstitution = institution.name;
+    this.selectedInstitutionId = institution.id;
+    await this.cargarSecciones(institution.id);
+  }
+
+  async selectSection(section: any): Promise<void> {
+    this.selectedSection = section.name;
+    this.selectedSectionId = section.id;
+    this.spaces = section.spaces;
+    if (this.spaces.length > 0) {
+      await this.selectSpace(this.spaces[0]);
+    }
+  }
+
+  async selectSpace(space: any): Promise<void> {
     this.selectedSpace = space.name;
+    this.selectedSpaceId = space.id;
     this.selectedSpaceDetails.name = space.name;
     this.selectedSpaceDetails.capacity = space.capacity;
     this.selectedSpaceDetails.type = space.type;
+    this.selectedSpaceDetails.section = this.selectedSection;
+    this.selectedSpaceDetails.institution = this.selectedInstitution;
+    
+    // Cargar reservas para este espacio
+    await this.cargarReservasDelEspacio(space.id);
   }
 
   getEventColor(status: string): string {
@@ -310,7 +421,7 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
     return status === 'Disponible' ? 'text-green-600' : 'text-red-600';
   }
 
-  // Métodos para editar disponibilidad
+  // ==================== EDITAR DISPONIBILIDAD ====================
   openEditModal(): void {
     this.editFormData = {
       selectedDate: '',
@@ -326,36 +437,83 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
     this.showEditModal = false;
   }
 
-  saveAvailability(): void {
+  async saveAvailability(): Promise<void> {
     if (!this.editFormData.selectedDate || !this.editFormData.startTime || !this.editFormData.endTime) {
       alert('Por favor completa todos los campos requeridos');
       return;
     }
 
-    const [selectedDay, selectedMonth, selectedYear] = this.editFormData.selectedDate.split('/').map(Number);
+    if (!this.selectedSpaceId) {
+      alert('No hay un espacio seleccionado');
+      return;
+    }
 
-    // Encontrar el día en el calendario
-    const dayIndex = this.calendarDays.findIndex(
-      d => d.date === selectedDay && d.month === selectedMonth - 1 && d.year === selectedYear
-    );
+    try {
+      this.cargando.set(true);
 
-    if (dayIndex !== -1) {
-      // Crear nuevo evento
-      const newEvent: CalendarEvent = {
-        time: `${this.editFormData.startTime}-${this.editFormData.endTime}`,
-        status: this.editFormData.status,
-        title: this.editFormData.title || (this.editFormData.status === 'occupied' ? 'Ocupado' : 'Disponible')
-      };
+      const [day, month, year] = this.editFormData.selectedDate.split('/').map(Number);
+      const fechaInicio = new Date(year, month - 1, day);
+      
+      // Agregar hora de inicio
+      const [horaInicio, minutoInicio] = this.editFormData.startTime.split(':').map(Number);
+      fechaInicio.setHours(horaInicio, minutoInicio, 0);
 
-      // Agregar el evento al día
-      this.calendarDays[dayIndex].events.push(newEvent);
+      // Crear fecha fin
+      const fechaFin = new Date(fechaInicio);
+      const [horaFin, minutoFin] = this.editFormData.endTime.split(':').map(Number);
+      fechaFin.setHours(horaFin, minutoFin, 0);
 
-      // Mostrar mensaje de éxito
-      alert(`✅ Disponibilidad guardada exitosamente\n\n${this.selectedSpace}\n${this.editFormData.selectedDate}\n${this.editFormData.startTime} - ${this.editFormData.endTime}\nEstado: ${this.editFormData.status === 'occupied' ? 'Ocupado' : 'Disponible'}`);
+      if (this.editFormData.status === 'occupied') {
+        // Crear una reserva nueva
+        const { data: reservaData, error: reservaError } = await this.supabase
+          .from('reserva')
+          .insert({
+            fecha_inicio: fechaInicio.toISOString(),
+            fecha_fin: fechaFin.toISOString(),
+            costo: 0,
+            usuarioid: null // Reserva administrativa sin usuario específico
+          })
+          .select()
+          .single();
 
+        if (reservaError) throw reservaError;
+
+        // Actualizar el espacio con la reserva
+        const { error: espacioError } = await this.supabase
+          .from('espacio')
+          .update({
+            reservaid: reservaData.reservaid,
+            estado: false // Ocupado
+          })
+          .eq('espacioid', this.selectedSpaceId);
+
+        if (espacioError) throw espacioError;
+
+        alert(`✅ Reserva creada exitosamente\n\n${this.selectedSpace}\n${this.editFormData.selectedDate}\n${this.editFormData.startTime} - ${this.editFormData.endTime}`);
+      } else {
+        // Marcar como disponible - eliminar reserva si existe
+        const { error: espacioError } = await this.supabase
+          .from('espacio')
+          .update({
+            reservaid: null,
+            estado: true // Disponible
+          })
+          .eq('espacioid', this.selectedSpaceId);
+
+        if (espacioError) throw espacioError;
+
+        alert(`✅ Espacio marcado como disponible\n\n${this.selectedSpace}\n${this.editFormData.selectedDate}`);
+      }
+
+      // Recargar reservas
+      await this.cargarReservasDelEspacio(this.selectedSpaceId);
       this.closeEditModal();
-    } else {
-      alert('Fecha inválida. Por favor selecciona una fecha válida del calendario.');
+
+    } catch (error: any) {
+      alert('Error al guardar: ' + error.message);
+      console.error('Error:', error);
+    } finally {
+      this.cargando.set(false);
     }
   }
 
@@ -363,11 +521,10 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
     this.editFormData.status = this.editFormData.status === 'occupied' ? 'available' : 'occupied';
   }
 
-  // Obtener lista de días disponibles para seleccionar
   getAvailableDates(): string[] {
     return this.calendarDays
       .filter(d => d.isCurrentMonth)
       .map(d => `${String(d.date).padStart(2, '0')}/${String(d.month + 1).padStart(2, '0')}/${d.year}`)
-      .slice(0, 31); // Máximo 31 días
+      .slice(0, 31);
   }
 }

@@ -1,406 +1,522 @@
 <div class="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
   <div class="max-w-7xl mx-auto">
     
-    <!-- Header con Navegación -->
+    <!-- Header Principal -->
     <div class="bg-white rounded-xl shadow-md p-6 mb-6">
-      <div class="flex items-center justify-between flex-wrap gap-4">
-        <div class="flex items-center gap-4">
-          @if (vistaActual() === 'secciones' || vistaActual() === 'espacios') {
-            <button 
-              (click)="volverAInstituciones()"
-              class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-              </svg>
-              Inicio
-            </button>
-          }
-          
-          @if (vistaActual() === 'espacios') {
-            <button 
-              (click)="volverASecciones()"
-              class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-              </svg>
-              Secciones
-            </button>
-          }
-          
-          <div>
-            <h2 class="text-2xl font-bold text-gray-900">
-              @if (vistaActual() === 'instituciones') {
-                🏢 Administrar Espacios
-              } @else if (vistaActual() === 'secciones') {
-                📚 Secciones - {{ institucionSeleccionada()?.nombre }}
-              } @else {
-                📋 Espacios - {{ seccionSeleccionada()?.nombre }}
-              }
-            </h2>
-            <p class="text-gray-600 text-sm mt-1">
-              @if (vistaActual() === 'instituciones') {
-                Gestiona las instituciones y sus espacios
-              } @else if (vistaActual() === 'secciones') {
-                Selecciona una sección para ver sus espacios
-              } @else {
-                Listado de espacios disponibles
-              }
-            </p>
-          </div>
-        </div>
+      <h1 class="text-3xl font-bold text-gray-900 mb-2">🏢 Administrar Espacios</h1>
+      <p class="text-gray-600">Gestiona instituciones, secciones y espacios</p>
+    </div>
+
+    <!-- Pestañas Principales -->
+    <div class="bg-white rounded-xl shadow-md mb-6">
+      <div class="border-b border-gray-200">
+        <nav class="flex -mb-px">
+          <button
+            (click)="cambiarPestana('instituciones')"
+            [class]="pestanaActiva() === 'instituciones' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            class="w-1/2 py-4 px-6 text-center border-b-2 font-medium text-sm transition-colors">
+            🏛️ Gestionar Instituciones
+          </button>
+          <button
+            (click)="cambiarPestana('espacios-secciones')"
+            [class]="pestanaActiva() === 'espacios-secciones' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            class="w-1/2 py-4 px-6 text-center border-b-2 font-medium text-sm transition-colors">
+            📦 Gestionar Espacios y Secciones
+          </button>
+        </nav>
       </div>
     </div>
 
-    <!-- Mensaje de Error -->
+    <!-- Mensajes -->
     @if (error()) {
       <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
         <p class="text-sm text-red-600">{{ error() }}</p>
       </div>
     }
 
-    <!-- Mensaje de Éxito -->
     @if (mensajeExito()) {
       <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
         <p class="text-sm text-green-600">{{ mensajeExito() }}</p>
       </div>
     }
 
-    <!-- Indicador de Carga -->
     @if (cargando()) {
       <div class="flex justify-center items-center py-12">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     }
 
-    <!-- Vista de Instituciones -->
-    @if (vistaActual() === 'instituciones' && !cargando()) {
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        @for (institucion of instituciones(); track institucion.institucionid) {
-          <div 
-            (click)="cargarSecciones(institucion)"
-            class="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden group border border-gray-200 hover:border-blue-500">
-            
-            <div class="p-6">
-              <!-- Icono -->
-              <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-                </svg>
-              </div>
+    <!-- PESTAÑA 1: GESTIONAR INSTITUCIONES -->
+    @if (pestanaActiva() === 'instituciones' && !cargando()) {
+      <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-bold text-gray-900">Instituciones</h2>
+          <button
+            (click)="abrirModalInstitucion('crear')"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nueva Institución
+          </button>
+        </div>
 
-              <!-- Contenido -->
-              <h3 class="text-xl font-bold text-gray-900 mb-2 line-clamp-1">
-                {{ institucion.nombre }}
-              </h3>
-              
-              <div class="space-y-2 text-sm text-gray-600">
-                @if (institucion.tipo) {
-                  <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          @for (inst of instituciones(); track inst.institucionid) {
+            <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div class="flex justify-between items-start mb-3">
+                <h3 class="font-bold text-lg text-gray-900">{{ inst.nombre }}</h3>
+                <div class="flex gap-2">
+                  <button
+                    (click)="abrirModalInstitucion('editar', inst)"
+                    class="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                    title="Editar">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                     </svg>
-                    <span class="line-clamp-1">{{ institucion.tipo }}</span>
-                  </div>
-                }
-                
-                @if (institucion.direccion) {
-                  <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </button>
+                  <button
+                    (click)="eliminarInstitucion(inst)"
+                    class="p-1 text-red-600 hover:bg-red-50 rounded"
+                    title="Eliminar">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                     </svg>
-                    <span class="line-clamp-1">{{ institucion.direccion }}</span>
-                  </div>
-                }
-
-                @if (institucion.servicio) {
-                  <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                    </svg>
-                    <span class="line-clamp-1">{{ institucion.servicio }}</span>
-                  </div>
-                }
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <!-- Footer -->
-            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 group-hover:bg-blue-50 transition-colors">
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-gray-600 group-hover:text-blue-600 font-medium">
-                  Ver secciones
-                </span>
-                <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
-              </div>
-            </div>
-          </div>
-        } @empty {
-          <div class="col-span-full text-center py-12">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-              <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-              </svg>
-            </div>
-            <p class="text-gray-600">No hay instituciones disponibles</p>
-          </div>
-        }
-      </div>
-    }
-
-    <!-- Vista de Secciones -->
-    @if (vistaActual() === 'secciones' && !cargando()) {
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        @for (seccion of secciones(); track seccion.seccionid) {
-          <div 
-            (click)="cargarEspacios(seccion)"
-            class="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden group border border-gray-200 hover:border-green-500">
-            
-            <div class="p-6">
-              <!-- Icono -->
-              <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                </svg>
-              </div>
-
-              <!-- Contenido -->
-              <h3 class="text-xl font-bold text-gray-900 mb-2 line-clamp-1">
-                {{ seccion.nombre }}
-              </h3>
-              
-              <div class="space-y-2 text-sm text-gray-600">
-                @if (seccion.tipo) {
-                  <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
-                    </svg>
-                    <span class="line-clamp-1">Tipo: {{ seccion.tipo }}</span>
-                  </div>
-                }
-                
-                @if (seccion.capacidad) {
-                  <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                    </svg>
-                    <span>Capacidad: {{ seccion.capacidad }}</span>
-                  </div>
-                }
-
-                @if (seccion.calificacion) {
-                  <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                    </svg>
-                    <span>{{ seccion.calificacion }}/5</span>
-                  </div>
-                }
-              </div>
-            </div>
-
-            <!-- Footer -->
-            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 group-hover:bg-green-50 transition-colors">
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-gray-600 group-hover:text-green-600 font-medium">
-                  Ver espacios
-                </span>
-                <svg class="w-5 h-5 text-gray-400 group-hover:text-green-600 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
-              </div>
-            </div>
-          </div>
-        } @empty {
-          <div class="col-span-full text-center py-12">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-              <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-              </svg>
-            </div>
-            <p class="text-gray-600">No hay secciones disponibles en esta institución</p>
-          </div>
-        }
-      </div>
-    }
-
-    <!-- Vista de Espacios (Lista) -->
-    @if (vistaActual() === 'espacios' && !cargando()) {
-      <!-- Botón Crear Espacio -->
-      <div class="mb-6 flex justify-end">
-        <button 
-          (click)="abrirModalCrear()"
-          class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-          </svg>
-          Crear Espacio
-        </button>
-      </div>
-
-      <div class="bg-white rounded-xl shadow-md overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nombre del Espacio
-                </th>
-                <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              @for (espacio of espacios(); track espacio.espacioid) {
-                <tr class="hover:bg-gray-50 transition-colors">
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex items-center">
-                      <div class="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
-                        </svg>
-                      </div>
-                      <div class="ml-4">
-                        <div class="text-sm font-medium text-gray-900">
-                          {{ espacio.nombre }}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <span [class]="'px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ' + obtenerEstadoClase(espacio.estado)">
-                      {{ obtenerEstadoTexto(espacio.estado) }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-right">
-                    <button
-                      (click)="eliminarEspacio(espacio)"
-                      class="inline-flex items-center p-2 text-red-600 hover:text-white hover:bg-red-600 rounded-lg transition-all duration-200 group"
-                      title="Eliminar espacio">
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              } @empty {
-                <tr>
-                  <td colspan="3" class="px-6 py-12 text-center">
-                    <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-                      <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
-                      </svg>
-                    </div>
-                    <p class="text-gray-600">No hay espacios disponibles en esta sección</p>
-                  </td>
-                </tr>
+              @if (inst.tipo) {
+                <p class="text-sm text-gray-600 mb-1"><span class="font-medium">Tipo:</span> {{ inst.tipo }}</p>
               }
-            </tbody>
-          </table>
+              @if (inst.direccion) {
+                <p class="text-sm text-gray-600 mb-1"><span class="font-medium">Dirección:</span> {{ inst.direccion }}</p>
+              }
+              @if (inst.servicio) {
+                <p class="text-sm text-gray-600"><span class="font-medium">Servicio:</span> {{ inst.servicio }}</p>
+              }
+            </div>
+          } @empty {
+            <div class="col-span-full text-center py-8 text-gray-500">
+              No hay instituciones creadas
+            </div>
+          }
         </div>
       </div>
     }
 
-  </div>
+    <!-- PESTAÑA 2: GESTIONAR ESPACIOS Y SECCIONES -->
+    @if (pestanaActiva() === 'espacios-secciones' && !cargando()) {
+      
+      <!-- Vista: Seleccionar Institución -->
+      @if (vistaSecundaria() === 'instituciones') {
+        <div class="bg-white rounded-xl shadow-md p-6">
+          <h2 class="text-xl font-bold text-gray-900 mb-6">Selecciona una Institución</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            @for (inst of instituciones(); track inst.institucionid) {
+              <div
+                (click)="seleccionarInstitucionParaSecciones(inst)"
+                class="border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer">
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                  </div>
+                  <h3 class="font-bold text-gray-900">{{ inst.nombre }}</h3>
+                </div>
+                @if (inst.tipo) {
+                  <p class="text-xs text-gray-500">{{ inst.tipo }}</p>
+                }
+              </div>
+            } @empty {
+              <div class="col-span-full text-center py-8 text-gray-500">
+                No hay instituciones disponibles
+              </div>
+            }
+          </div>
+        </div>
+      }
 
-  <!-- Modal Crear Espacio -->
-  @if (mostrarModalCrear()) {
-    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-fadeIn">
-        <!-- Header del Modal -->
-        <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-xl font-bold text-white flex items-center gap-2">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <!-- Vista: Secciones de la Institución -->
+      @if (vistaSecundaria() === 'secciones') {
+        <div class="bg-white rounded-xl shadow-md p-6">
+          <div class="flex items-center gap-4 mb-6">
+            <button
+              (click)="volverAInstitucionesSecundaria()"
+              class="p-2 text-red-600 hover:bg-red-50 rounded-lg">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <div class="flex-1">
+              <h2 class="text-xl font-bold text-gray-900">Secciones - {{ institucionSeleccionada()?.nombre }}</h2>
+            </div>
+            <button
+              (click)="abrirModalSeccion('crear')"
+              class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
               </svg>
-              Crear Nuevo Espacio
+              Nueva Sección
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            @for (sec of secciones(); track sec.seccionid) {
+              <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start mb-3">
+                  <h3 class="font-bold text-gray-900">{{ sec.nombre }}</h3>
+                  <div class="flex gap-2">
+                    <button
+                      (click)="abrirModalSeccion('editar', sec)"
+                      class="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                      title="Editar">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                      </svg>
+                    </button>
+                    <button
+                      (click)="eliminarSeccion(sec)"
+                      class="p-1 text-red-600 hover:bg-red-50 rounded"
+                      title="Eliminar">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                @if (sec.tipo) {
+                  <p class="text-sm text-gray-600 mb-1"><span class="font-medium">Tipo:</span> {{ sec.tipo }}</p>
+                }
+                @if (sec.capacidad) {
+                  <p class="text-sm text-gray-600 mb-1"><span class="font-medium">Capacidad:</span> {{ sec.capacidad }}</p>
+                }
+                @if (sec.calificacion) {
+                  <p class="text-sm text-gray-600 mb-2"><span class="font-medium">Calificación:</span> {{ sec.calificacion }}/5</p>
+                }
+                <button
+                  (click)="seleccionarSeccionParaEspacios(sec)"
+                  class="w-full mt-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm transition-colors">
+                  Ver Espacios
+                </button>
+              </div>
+            } @empty {
+              <div class="col-span-full text-center py-8 text-gray-500">
+                No hay secciones en esta institución
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Vista: Espacios de la Sección -->
+      @if (vistaSecundaria() === 'espacios') {
+        <div class="bg-white rounded-xl shadow-md p-6">
+          <div class="flex items-center gap-4 mb-6">
+            <button
+              (click)="volverASecciones()"
+              class="p-2 text-red-600 hover:bg-red-50 rounded-lg">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <div class="flex-1">
+              <h2 class="text-xl font-bold text-gray-900">Espacios - {{ seccionSeleccionada()?.nombre }}</h2>
+              <p class="text-sm text-gray-600">{{ institucionSeleccionada()?.nombre }}</p>
+            </div>
+            <button
+              (click)="abrirModalEspacio('crear')"
+              class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              Nuevo Espacio
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                @for (esp of espacios(); track esp.espacioid) {
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ esp.nombre }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span [class]="'px-3 py-1 inline-flex text-xs font-semibold rounded-full ' + obtenerEstadoClase(esp.estado)">
+                        {{ obtenerEstadoTexto(esp.estado) }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        (click)="abrirModalEspacio('editar', esp)"
+                        class="text-blue-600 hover:text-blue-900 mr-3"
+                        title="Editar">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                      </button>
+                      <button
+                        (click)="eliminarEspacio(esp)"
+                        class="text-red-600 hover:text-red-900"
+                        title="Eliminar">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                      No hay espacios en esta sección
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+    }
+
+  </div>
+
+  <!-- MODAL: INSTITUCIÓN -->
+  @if (mostrarModalInstitucion()) {
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 rounded-t-2xl">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xl font-bold text-white">
+              {{ modoInstitucion() === 'crear' ? 'Nueva Institución' : 'Editar Institución' }}
             </h3>
-            <button 
-              (click)="cerrarModalCrear()"
-              class="text-white hover:bg-blue-800 rounded-lg p-1 transition-colors">
+            <button (click)="cerrarModalInstitucion()" class="text-white hover:bg-blue-800 rounded-lg p-1">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
               </svg>
             </button>
           </div>
         </div>
-
-        <!-- Contenido del Modal -->
+        
         <div class="p-6 space-y-4">
-          <!-- Información de la sección -->
-          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p class="text-sm text-blue-800">
-              <span class="font-semibold">Sección:</span> {{ seccionSeleccionada()?.nombre }}
-            </p>
-            <p class="text-xs text-blue-600 mt-1">
-              El espacio se creará en esta sección y estará desocupado por defecto
-            </p>
-          </div>
-
-          <!-- Campo Nombre -->
           <div>
-            <label for="nombreEspacio" class="block text-sm font-medium text-gray-700 mb-2">
-              Nombre del Espacio <span class="text-red-500">*</span>
-            </label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nombre <span class="text-red-500">*</span></label>
             <input
-              id="nombreEspacio"
               type="text"
-              [value]="nombreNuevoEspacio()"
-              (input)="nombreNuevoEspacio.set($any($event.target).value)"
-              placeholder="Ej: Asiento-001, Espacio-001, etc."
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900"
-              [disabled]="creandoEspacio()"
-            />
+              [value]="institucionForm().nombre"
+              (input)="actualizarInstitucionNombre($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="Nombre de la institución" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+            <input
+              type="text"
+              [value]="institucionForm().tipo"
+              (input)="actualizarInstitucionTipo($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="Ej: Universidad, Biblioteca, etc." />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Dirección</label>
+            <input
+              type="text"
+              [value]="institucionForm().direccion"
+              (input)="actualizarInstitucionDireccion($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="Dirección física" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Servicio</label>
+            <input
+              type="text"
+              [value]="institucionForm().servicio"
+              (input)="actualizarInstitucionServicio($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="Servicios que ofrece" />
           </div>
 
-          <!-- Mensaje de Error en Modal -->
-          @if (error() && mostrarModalCrear()) {
-            <div class="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p class="text-sm text-red-600">{{ error() }}</p>
-            </div>
-          }
-
-          <!-- Mensaje de Éxito en Modal -->
-          @if (mensajeExito() && mostrarModalCrear()) {
-            <div class="p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p class="text-sm text-green-600">{{ mensajeExito() }}</p>
-            </div>
-          }
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              🕐 Horario de Atención
+            </label>
+            <select
+              [value]="horarioSeleccionado() || ''"
+              (change)="actualizarHorarioSeleccionado($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer">
+              <option value="">📅 Sin horario asignado</option>
+              @for (horario of horarios(); track horario.horarioid) {
+                <option [value]="horario.horarioid">
+                  {{ obtenerTextoHorario(horario) }}
+                </option>
+              }
+            </select>
+            <p class="text-xs text-gray-500 mt-1 flex items-start gap-1">
+              <svg class="w-3 h-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+              <span>Puedes gestionar horarios desde el Calendario de Disponibilidad</span>
+            </p>
+          </div>
         </div>
-
-        <!-- Footer del Modal -->
-        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+        
+        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
           <button
-            (click)="cerrarModalCrear()"
-            [disabled]="creandoEspacio()"
-            class="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            (click)="cerrarModalInstitucion()"
+            class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors">
             Cancelar
           </button>
           <button
-            (click)="crearEspacio()"
-            [disabled]="creandoEspacio() || !nombreNuevoEspacio().trim()"
-            class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-            @if (creandoEspacio()) {
-              <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Creando...
-            } @else {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-              </svg>
-              Crear Espacio
-            }
+            (click)="guardarInstitucion()"
+            class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+            {{ modoInstitucion() === 'crear' ? 'Crear' : 'Guardar' }}
           </button>
         </div>
       </div>
     </div>
   }
+
+  <!-- MODAL: SECCIÓN -->
+  @if (mostrarModalSeccion()) {
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div class="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 rounded-t-2xl">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xl font-bold text-white">
+              {{ modoSeccion() === 'crear' ? 'Nueva Sección' : 'Editar Sección' }}
+            </h3>
+            <button (click)="cerrarModalSeccion()" class="text-white hover:bg-green-800 rounded-lg p-1">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div class="p-6 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nombre <span class="text-red-500">*</span></label>
+            <input
+              type="text"
+              [value]="seccionForm().nombre"
+              (input)="actualizarSeccionNombre($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              placeholder="Nombre de la sección" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+            <input
+              type="text"
+              [value]="seccionForm().tipo"
+              (input)="actualizarSeccionTipo($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              placeholder="Tipo de sección" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Capacidad</label>
+            <input
+              type="number"
+              [value]="seccionForm().capacidad"
+              (input)="actualizarSeccionCapacidad(+$any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              placeholder="0" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Calificación (0-5)</label>
+            <input
+              type="number"
+              min="0"
+              max="5"
+              [value]="seccionForm().calificacion"
+              (input)="actualizarSeccionCalificacion(+$any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              placeholder="0" />
+          </div>
+        </div>
+        
+        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
+          <button
+            (click)="cerrarModalSeccion()"
+            class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors">
+            Cancelar
+          </button>
+          <button
+            (click)="guardarSeccion()"
+            class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
+            {{ modoSeccion() === 'crear' ? 'Crear' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- MODAL: ESPACIO -->
+  @if (mostrarModalEspacio()) {
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <div class="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 rounded-t-2xl">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xl font-bold text-white">
+              {{ modoEspacio() === 'crear' ? 'Nuevo Espacio' : 'Editar Espacio' }}
+            </h3>
+            <button (click)="cerrarModalEspacio()" class="text-white hover:bg-purple-800 rounded-lg p-1">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div class="p-6 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nombre <span class="text-red-500">*</span></label>
+            <input
+              type="text"
+              [value]="espacioForm().nombre"
+              (input)="actualizarEspacioNombre($any($event.target).value)"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+              placeholder="Nombre del espacio" />
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                [checked]="espacioForm().estado"
+                (change)="actualizarEspacioEstado($any($event.target).checked)"
+                class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
+              <span class="text-sm text-gray-700">Desocupado (disponible)</span>
+            </label>
+          </div>
+        </div>
+        
+        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
+          <button
+            (click)="cerrarModalEspacio()"
+            class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors">
+            Cancelar
+          </button>
+          <button
+            (click)="guardarEspacio()"
+            class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors">
+            {{ modoEspacio() === 'crear' ? 'Crear' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
 </div>

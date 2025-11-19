@@ -24,7 +24,7 @@
   </div>
 
   <div class="catalog-grid" *ngIf="!loading">
-    <article *ngFor="let esp of filteredEspacios()" class="catalog-card" [class.disabled]="!esp.disponible" role="article" aria-labelledby="title-{{esp.id}}">
+    <article *ngFor="let esp of filteredEspacios()" class="catalog-card" [class.disabled]="!esp.disponible" role="article" [attr.aria-labelledby]="'title-' + esp.id">
       <div class="img-wrap">
         <picture>
           <source type="image/webp" [srcset]="esp.imagen.replace('.svg','.webp')" />
