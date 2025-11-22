@@ -39,6 +39,15 @@ export class CalendarioDisponibilidad implements OnInit {
   instituciones = signal<Institucion[]>([]);
   institucionSeleccionada = signal<Institucion | null>(null);
   horarioActual = signal<Horario | null>(null);
+  todosLosHorarios = signal<Horario[]>([]);
+  
+  // Modos de vista
+  vistaActiva = signal<'instituciones' | 'horarios'>('instituciones');
+  
+  // Modal de horarios independientes
+  mostrarModalHorarioIndependiente = signal<boolean>(false);
+  modoEdicionHorario = signal<'crear' | 'editar'>('crear');
+  horarioSeleccionadoParaEditar = signal<Horario | null>(null);
   
   // Calendario
   fechaActual = signal<Date>(new Date());
@@ -137,9 +146,30 @@ export class CalendarioDisponibilidad implements OnInit {
 
   ngOnInit() {
     this.cargarInstituciones();
+    this.cargarTodosLosHorarios();
   }
 
   // ==================== CARGA DE DATOS ====================
+  async cargarTodosLosHorarios() {
+    try {
+      this.cargando.set(true);
+      
+      const { data, error } = await this.supabase
+        .from('horario')
+        .select('*')
+        .order('horainicio', { ascending: true });
+
+      if (error) throw error;
+      
+      console.log('Horarios cargados:', data);
+      this.todosLosHorarios.set(data || []);
+    } catch (error: any) {
+      console.error('Error al cargar horarios:', error);
+      this.error.set('Error al cargar los horarios');
+    } finally {
+      this.cargando.set(false);
+    }
+  }
   async cargarInstituciones() {
     try {
       this.cargando.set(true);
@@ -208,6 +238,146 @@ export class CalendarioDisponibilidad implements OnInit {
   }
 
   // ==================== GESTIÓN DE HORARIOS ====================
+  cambiarVista(vista: 'instituciones' | 'horarios') {
+    this.vistaActiva.set(vista);
+    this.limpiarMensajes();
+  }
+
+  abrirModalHorarioIndependiente(modo: 'crear' | 'editar', horario?: Horario) {
+    this.modoEdicionHorario.set(modo);
+    
+    if (modo === 'editar' && horario) {
+      this.horarioSeleccionadoParaEditar.set(horario);
+      this.horarioForm.set({
+        horainicio: horario.horainicio || '08:00',
+        horafin: horario.horafin || '18:00',
+        diasSeleccionados: horario.semana ? horario.semana.split(',').map(d => d.trim()) : []
+      });
+    } else {
+      this.horarioSeleccionadoParaEditar.set(null);
+      this.horarioForm.set({
+        horainicio: '08:00',
+        horafin: '18:00',
+        diasSeleccionados: ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+      });
+    }
+    
+    this.mostrarModalHorarioIndependiente.set(true);
+    this.limpiarMensajes();
+  }
+
+  cerrarModalHorarioIndependiente() {
+    this.mostrarModalHorarioIndependiente.set(false);
+    this.horarioSeleccionadoParaEditar.set(null);
+  }
+
+  async guardarHorarioIndependiente() {
+    const form = this.horarioForm();
+    
+    if (form.diasSeleccionados.length === 0) {
+      this.error.set('Debe seleccionar al menos un día');
+      return;
+    }
+    
+    if (!form.horainicio || !form.horafin) {
+      this.error.set('Debe especificar hora de inicio y fin');
+      return;
+    }
+
+    try {
+      this.cargando.set(true);
+      this.error.set('');
+      
+      const semanaTexto = form.diasSeleccionados.join(',');
+      
+      if (this.modoEdicionHorario() === 'editar') {
+        const horarioEditar = this.horarioSeleccionadoParaEditar();
+        if (!horarioEditar) return;
+
+        const { error } = await this.supabase
+          .from('horario')
+          .update({
+            horainicio: form.horainicio,
+            horafin: form.horafin,
+            semana: semanaTexto
+          })
+          .eq('horarioid', horarioEditar.horarioid);
+
+        if (error) throw error;
+        this.mensajeExito.set('Horario actualizado exitosamente');
+      } else {
+        const { error } = await this.supabase
+          .from('horario')
+          .insert([{
+            horainicio: form.horainicio,
+            horafin: form.horafin,
+            semana: semanaTexto
+          }]);
+
+        if (error) throw error;
+        this.mensajeExito.set('Horario creado exitosamente');
+      }
+
+      await this.cargarTodosLosHorarios();
+      
+      setTimeout(() => {
+        this.cerrarModalHorarioIndependiente();
+        this.mensajeExito.set('');
+      }, 1500);
+
+    } catch (error: any) {
+      this.error.set('Error al guardar el horario');
+      console.error('Error:', error);
+    } finally {
+      this.cargando.set(false);
+    }
+  }
+
+  async eliminarHorario(horario: Horario) {
+    // Verificar si el horario está en uso
+    const enUso = this.instituciones().some(inst => inst.horarioid === horario.horarioid);
+    
+    if (enUso) {
+      this.error.set('No se puede eliminar este horario porque está asignado a una o más instituciones');
+      setTimeout(() => this.error.set(''), 4000);
+      return;
+    }
+
+    if (!confirm(`¿Estás seguro de que deseas eliminar este horario?\n${horario.horainicio} - ${horario.horafin}`)) {
+      return;
+    }
+
+    try {
+      this.cargando.set(true);
+      this.error.set('');
+
+      const { error } = await this.supabase
+        .from('horario')
+        .delete()
+        .eq('horarioid', horario.horarioid);
+
+      if (error) throw error;
+
+      this.mensajeExito.set('Horario eliminado exitosamente');
+      await this.cargarTodosLosHorarios();
+
+      setTimeout(() => {
+        this.mensajeExito.set('');
+      }, 3000);
+
+    } catch (error: any) {
+      this.error.set('Error al eliminar el horario');
+      console.error('Error:', error);
+    } finally {
+      this.cargando.set(false);
+    }
+  }
+
+  obtenerInstitucionesConHorario(horarioid: string): string[] {
+    return this.instituciones()
+      .filter(inst => inst.horarioid === horarioid)
+      .map(inst => inst.nombre);
+  }
   abrirModalHorario() {
     const horario = this.horarioActual();
     
