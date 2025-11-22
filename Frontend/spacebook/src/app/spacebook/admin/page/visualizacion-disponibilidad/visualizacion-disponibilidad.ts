@@ -28,6 +28,7 @@ interface Seccion {
   tipo: string;
   capacidad: number;
   calificacion: number;
+  amenidades: string;
 }
 
 interface Espacio {
@@ -112,15 +113,15 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
   ];
   calendarDays: CalendarDay[] = [];
 
-  // Panel lateral
+  // Panel lateral - Ahora muestra información de la SECCIÓN
   selectedSpaceDetails = {
-    name: 'Auditorio Principal',
-    capacity: 500,
-    type: 'Auditorio',
+    name: '',
+    capacity: 0,
+    type: '',
     status: 'Disponible',
-    section: 'Auditorios',
-    institution: 'Universidad Nacional de Colombia',
-    amenities: ['Proyector', 'Sonido Profesional', 'Aire Acondicionado', 'WiFi']
+    section: '',
+    institution: '',
+    amenities: [] as string[]
   };
 
   // Modal de Editar Disponibilidad
@@ -474,19 +475,47 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
     this.selectedSection = section.name;
     this.selectedSectionId = section.id;
     this.spaces = section.spaces;
-    if (this.spaces.length > 0) {
-      await this.selectSpace(this.spaces[0]);
+    
+    // Cargar datos completos de la sección desde Supabase para obtener amenidades
+    try {
+      const { data: seccionData, error } = await this.supabase
+        .from('seccion')
+        .select('*')
+        .eq('seccionid', section.id)
+        .single();
+
+      if (error) throw error;
+
+      if (seccionData) {
+        // Actualizar panel lateral con información de la SECCIÓN
+        this.selectedSpaceDetails.name = seccionData.nombre;
+        this.selectedSpaceDetails.capacity = seccionData.capacidad || 0;
+        this.selectedSpaceDetails.type = seccionData.tipo || '';
+        this.selectedSpaceDetails.section = seccionData.nombre;
+        this.selectedSpaceDetails.institution = this.selectedInstitution;
+        
+        // Procesar amenidades (separadas por comas)
+        if (seccionData.amenidades) {
+          this.selectedSpaceDetails.amenities = seccionData.amenidades
+            .split(',')
+            .map((a: string) => a.trim())
+            .filter((a: string) => a !== '');
+        } else {
+          this.selectedSpaceDetails.amenities = [];
+        }
+      }
+    } catch (error: any) {
+      console.error('Error al cargar detalles de la sección:', error);
+      this.selectedSpaceDetails.amenities = [];
     }
+
+    // Ya no seleccionamos automáticamente un espacio
+    // La tarjeta mostrará información de la sección completa
   }
 
   async selectSpace(space: any): Promise<void> {
     this.selectedSpace = space.name;
     this.selectedSpaceId = space.id;
-    this.selectedSpaceDetails.name = space.name;
-    this.selectedSpaceDetails.capacity = space.capacity;
-    this.selectedSpaceDetails.type = space.type;
-    this.selectedSpaceDetails.section = this.selectedSection;
-    this.selectedSpaceDetails.institution = this.selectedInstitution;
     
     // Cargar reservas para este espacio
     await this.cargarReservasDelEspacio(space.id);

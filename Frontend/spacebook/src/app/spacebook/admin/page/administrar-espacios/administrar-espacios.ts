@@ -20,6 +20,7 @@ interface Seccion {
   capacidad: number;
   calificacion: number;
   institucionid: string;
+  amenidades: string;
 }
 
 interface Espacio {
@@ -82,8 +83,12 @@ export class AdministrarEspacios implements OnInit {
     nombre: '',
     tipo: '',
     capacidad: 0,
-    calificacion: 0
+    calificacion: 0,
+    amenidades: ''
   });
+  
+  // Amenidades dinámicas
+  amenidadesLista = signal<string[]>(['']); // Inicia con 1 campo vacío
   
   mostrarModalEspacio = signal<boolean>(false);
   modoEspacio = signal<ModoEdicion>('crear');
@@ -317,13 +322,26 @@ export class AdministrarEspacios implements OnInit {
     if (modo === 'editar' && seccion) {
       this.seccionForm.set({ ...seccion });
       this.seccionSeleccionada.set(seccion);
+      // Cargar amenidades desde el string separado por comas
+      if (seccion.amenidades) {
+        const amenidadesArray = seccion.amenidades.split(',').map(a => a.trim()).filter(a => a !== '');
+        // Si no hay amenidades, iniciar con 1 campo vacío
+        if (amenidadesArray.length === 0) {
+          amenidadesArray.push('');
+        }
+        this.amenidadesLista.set(amenidadesArray);
+      } else {
+        this.amenidadesLista.set(['']);
+      }
     } else {
       this.seccionForm.set({
         nombre: '',
         tipo: '',
         capacidad: 0,
-        calificacion: 0
+        calificacion: 0,
+        amenidades: ''
       });
+      this.amenidadesLista.set(['']);
       this.seccionSeleccionada.set(null);
     }
     this.mostrarModalSeccion.set(true);
@@ -336,8 +354,10 @@ export class AdministrarEspacios implements OnInit {
       nombre: '',
       tipo: '',
       capacidad: 0,
-      calificacion: 0
+      calificacion: 0,
+      amenidades: ''
     });
+    this.amenidadesLista.set(['']);
     this.seccionSeleccionada.set(null);
   }
 
@@ -355,6 +375,11 @@ export class AdministrarEspacios implements OnInit {
       return;
     }
 
+    // Convertir amenidades array a string separado por comas
+    const amenidadesString = this.amenidadesLista()
+      .filter(a => a.trim() !== '')
+      .join(',');
+
     try {
       this.cargando.set(true);
       this.error.set('');
@@ -368,6 +393,7 @@ export class AdministrarEspacios implements OnInit {
             tipo: form.tipo || null,
             capacidad: form.capacidad || 0,
             calificacion: form.calificacion || 0,
+            amenidades: amenidadesString || null,
             institucionid: institucion.institucionid
           }])
           .select()
@@ -414,7 +440,8 @@ export class AdministrarEspacios implements OnInit {
             nombre: form.nombre,
             tipo: form.tipo || null,
             capacidad: capacidadNueva,
-            calificacion: form.calificacion || 0
+            calificacion: form.calificacion || 0,
+            amenidades: amenidadesString || null
           })
           .eq('seccionid', seccion.seccionid);
 
@@ -709,6 +736,38 @@ export class AdministrarEspacios implements OnInit {
 
   actualizarSeccionCalificacion(value: number) {
     this.seccionForm.set({ ...this.seccionForm(), calificacion: value });
+  }
+
+  // ==================== GESTIÓN DE AMENIDADES ====================
+  actualizarAmenidad(index: number, value: string) {
+    const amenidades = [...this.amenidadesLista()];
+    amenidades[index] = value;
+    this.amenidadesLista.set(amenidades);
+  }
+
+  agregarCampoAmenidad() {
+    const amenidades = [...this.amenidadesLista()];
+    if (amenidades.length < 10) {
+      amenidades.push('');
+      this.amenidadesLista.set(amenidades);
+    }
+  }
+
+  eliminarCampoAmenidad(index: number) {
+    const amenidades = [...this.amenidadesLista()];
+    // Solo permitir eliminar si hay más de 1 campo
+    if (amenidades.length > 1) {
+      amenidades.splice(index, 1);
+      this.amenidadesLista.set(amenidades);
+    }
+  }
+
+  puedeAgregarAmenidad(): boolean {
+    return this.amenidadesLista().length < 10;
+  }
+
+  puedeEliminarAmenidad(): boolean {
+    return this.amenidadesLista().length > 1;
   }
 
   actualizarEspacioNombre(value: string) {
