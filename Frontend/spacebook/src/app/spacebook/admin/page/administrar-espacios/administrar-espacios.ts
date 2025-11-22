@@ -360,7 +360,8 @@ export class AdministrarEspacios implements OnInit {
       this.error.set('');
 
       if (this.modoSeccion() === 'crear') {
-        const { error } = await this.supabase
+        // Crear la sección
+        const { data: nuevaSeccion, error: errorSeccion } = await this.supabase
           .from('seccion')
           .insert([{
             nombre: form.nombre,
@@ -368,26 +369,81 @@ export class AdministrarEspacios implements OnInit {
             capacidad: form.capacidad || 0,
             calificacion: form.calificacion || 0,
             institucionid: institucion.institucionid
-          }]);
+          }])
+          .select()
+          .single();
 
-        if (error) throw error;
-        this.mensajeExito.set('Sección creada exitosamente');
+        if (errorSeccion) throw errorSeccion;
+
+        // Crear espacios automáticamente según la capacidad
+        const capacidad = form.capacidad || 0;
+        if (capacidad > 0 && nuevaSeccion) {
+          const espacios = [];
+          for (let i = 1; i <= capacidad; i++) {
+            espacios.push({
+              nombre: `${form.nombre}-${i.toString().padStart(2, '0')}`,
+              estado: true,
+              seccionid: nuevaSeccion.seccionid
+            });
+          }
+
+          const { error: errorEspacios } = await this.supabase
+            .from('espacio')
+            .insert(espacios);
+
+          if (errorEspacios) {
+            console.error('Error al crear espacios:', errorEspacios);
+            this.mensajeExito.set(`Sección creada exitosamente, pero hubo un error al crear ${capacidad} espacios`);
+          } else {
+            this.mensajeExito.set(`Sección creada exitosamente con ${capacidad} espacios`);
+          }
+        } else {
+          this.mensajeExito.set('Sección creada exitosamente');
+        }
       } else {
         const seccion = this.seccionSeleccionada();
         if (!seccion) return;
 
+        const capacidadAnterior = seccion.capacidad;
+        const capacidadNueva = form.capacidad || 0;
+
+        // Actualizar la sección
         const { error } = await this.supabase
           .from('seccion')
           .update({
             nombre: form.nombre,
             tipo: form.tipo || null,
-            capacidad: form.capacidad || 0,
+            capacidad: capacidadNueva,
             calificacion: form.calificacion || 0
           })
           .eq('seccionid', seccion.seccionid);
 
         if (error) throw error;
-        this.mensajeExito.set('Sección actualizada exitosamente');
+
+        // Si aumentó la capacidad, crear los espacios faltantes
+        if (capacidadNueva > capacidadAnterior) {
+          const espaciosFaltantes = [];
+          for (let i = capacidadAnterior + 1; i <= capacidadNueva; i++) {
+            espaciosFaltantes.push({
+              nombre: `${form.nombre}-${i.toString().padStart(2, '0')}`,
+              estado: true,
+              seccionid: seccion.seccionid
+            });
+          }
+
+          const { error: errorEspacios } = await this.supabase
+            .from('espacio')
+            .insert(espaciosFaltantes);
+
+          if (errorEspacios) {
+            console.error('Error al crear espacios adicionales:', errorEspacios);
+            this.mensajeExito.set('Sección actualizada, pero hubo un error al crear espacios adicionales');
+          } else {
+            this.mensajeExito.set(`Sección actualizada y se agregaron ${capacidadNueva - capacidadAnterior} espacios nuevos`);
+          }
+        } else {
+          this.mensajeExito.set('Sección actualizada exitosamente');
+        }
       }
 
       await this.cargarSecciones(institucion);

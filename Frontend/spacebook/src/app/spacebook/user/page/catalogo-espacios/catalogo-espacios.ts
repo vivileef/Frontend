@@ -1,121 +1,94 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-
-interface Espacio {
-  id: string;
-  nombre: string;
-  descripcion: string;
-  capacidad: number;
-  imagen: string;
-  disponible: boolean;
-}
+import { DatabaseService } from '../../../../shared/services/database.service';
+import { Institucion, Seccion, Espacio } from '../../../../shared/models/database.models';
 
 @Component({
   selector: 'app-catalogo-espacios',
+  standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './catalogo-espacios.html',
   styleUrl: './catalogo-espacios.css',
 })
 export class CatalogoEspacios implements OnInit {
-  filtro = '';
-  filtroDebounced = '';
-  private searchTimer: any = null;
+  // Signals para datos
+  instituciones = signal<Institucion[]>([]);
+  secciones = signal<Seccion[]>([]);
+  espacios = signal<Espacio[]>([]);
+  
+  // Navegación
+  vistaActual = signal<'instituciones' | 'espacios'>('instituciones');
+  institucionSeleccionada = signal<Institucion | null>(null);
+  
+  // Estados
+  cargando = signal(true);
+  error = signal('');
 
-  minCapacidad: number | null = null;
-  onlyDisponibles = false;
-  sortBy: 'relevance' | 'capacidad-desc' | 'capacidad-asc' = 'relevance';
+  private dbService = inject(DatabaseService);
 
-  modalOpen = false;
-  modalEsp: Espacio | null = null;
-
-  loading = true;
-
-  espacios: Espacio[] = [
-    {
-      id: 's1',
-      nombre: 'Sala de Reuniones A',
-      descripcion: 'Sala con proyector, 10 sillas y pizarra blanca.',
-      capacidad: 10,
-      imagen: '/assets/images/espacios/reunion-a.jpg.svg',
-      disponible: true,
-    },
-    {
-      id: 's2',
-      nombre: 'Auditorio Principal',
-      descripcion: 'Auditorio para conferencias con capacidad amplia.',
-      capacidad: 200,
-      imagen: '/assets/images/espacios/auditorio.jpg.svg',
-      disponible: true,
-    },
-    {
-      id: 's3',
-      nombre: 'Sala de Estudio B',
-      descripcion: 'Espacio silencioso para estudio individual y grupal.',
-      capacidad: 30,
-      imagen: '/assets/images/espacios/estudio-b.jpg.svg',
-      disponible: false,
-    }
-  ];
-
-  ngOnInit() {
-    // Simular carga para mostrar skeletons; en producción esto vendría de la API
-    setTimeout(() => {
-      this.loading = false;
-    }, 600);
+  async ngOnInit() {
+    await this.cargarInstituciones();
   }
 
-  onFiltroInput() {
-    // debounce simple
-    if (this.searchTimer) clearTimeout(this.searchTimer);
-    this.searchTimer = setTimeout(() => {
-      this.filtroDebounced = this.filtro.trim().toLowerCase();
-    }, 300);
+  async cargarInstituciones() {
+    try {
+      this.cargando.set(true);
+      this.error.set('');
+      const data = await this.dbService.getInstituciones();
+      this.instituciones.set(data);
+    } catch (err: any) {
+      this.error.set('Error al cargar instituciones: ' + err.message);
+      console.error(err);
+    } finally {
+      this.cargando.set(false);
+    }
   }
 
-  verDetalle(esp: Espacio) {
-    this.modalEsp = esp;
-    this.modalOpen = true;
+  async seleccionarInstitucion(institucion: Institucion) {
+    try {
+      this.cargando.set(true);
+      this.error.set('');
+      this.institucionSeleccionada.set(institucion);
+      
+      // Cargar secciones de la institución
+      const secciones = await this.dbService.getSecciones(institucion.institucionid);
+      this.secciones.set(secciones);
+      
+      // Cargar espacios de todas las secciones
+      const todosEspacios: Espacio[] = [];
+      for (const seccion of secciones) {
+        const espaciosSeccion = await this.dbService.getEspacios(seccion.seccionid);
+        todosEspacios.push(...espaciosSeccion);
+      }
+      this.espacios.set(todosEspacios);
+      
+      this.vistaActual.set('espacios');
+    } catch (err: any) {
+      this.error.set('Error al cargar espacios: ' + err.message);
+      console.error(err);
+    } finally {
+      this.cargando.set(false);
+    }
   }
 
-  reservar(esp: Espacio) {
-    if (!esp || !esp.disponible) return;
-    // Aquí debe integrarse el flujo real de reservas. Por ahora simulamos.
-    alert(`Reservando ${esp.nombre}`);
-    this.closeModal();
+  volverAInstituciones() {
+    this.vistaActual.set('instituciones');
+    this.institucionSeleccionada.set(null);
+    this.secciones.set([]);
+    this.espacios.set([]);
   }
 
-  closeModal() {
-    this.modalOpen = false;
-    this.modalEsp = null;
+  reservarEspacio(espacio: Espacio) {
+    // TODO: Implementar lógica de reserva
+    alert(`Función de reserva próximamente disponible para: ${espacio.nombre}`);
   }
 
-  filteredEspacios(): Espacio[] {
-    let list = [...this.espacios];
+  obtenerEstadoTexto(estado?: boolean): string {
+    return estado === true ? 'Disponible' : estado === false ? 'Ocupado' : 'Sin definir';
+  }
 
-    // aplicar filtro de texto si existe (debounced)
-    const q = this.filtroDebounced;
-    if (q) {
-      list = list.filter(e => e.nombre.toLowerCase().includes(q) || (e.descripcion || '').toLowerCase().includes(q));
-    }
-
-    // filtro por capacidad
-    if (this.minCapacidad != null) {
-      list = list.filter(e => e.capacidad >= (this.minCapacidad || 0));
-    }
-
-    // filter disponibilidad
-    if (this.onlyDisponibles) {
-      list = list.filter(e => e.disponible);
-    }
-
-    // ordenar
-    if (this.sortBy === 'capacidad-desc') {
-      list.sort((a, b) => b.capacidad - a.capacidad);
-    } else if (this.sortBy === 'capacidad-asc') {
-      list.sort((a, b) => a.capacidad - b.capacidad);
-    }
-
-    return list;
+  obtenerEstadoClase(estado?: boolean): string {
+    return estado === true ? 'bg-green-100 text-green-800' : estado === false ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800';
   }
 }

@@ -409,7 +409,7 @@
               type="text"
               [value]="seccionForm().nombre"
               (input)="actualizarSeccionNombre($any($event.target).value)"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              class="w-full text-gray-600  px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
               placeholder="Nombre de la sección" />
           </div>
           
@@ -419,7 +419,7 @@
               type="text"
               [value]="seccionForm().tipo"
               (input)="actualizarSeccionTipo($any($event.target).value)"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              class="w-full px-4 text-gray-600  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
               placeholder="Tipo de sección" />
           </div>
           
@@ -429,7 +429,7 @@
               type="number"
               [value]="seccionForm().capacidad"
               (input)="actualizarSeccionCapacidad(+$any($event.target).value)"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              class="w-full px-4 text-gray-600  py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
               placeholder="0" />
           </div>
           
@@ -441,7 +441,7 @@
               max="5"
               [value]="seccionForm().calificacion"
               (input)="actualizarSeccionCalificacion(+$any($event.target).value)"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+              class="w-full px-4 py-2 text-gray-600  border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
               placeholder="0" />
           </div>
         </div>
@@ -486,7 +486,7 @@
               type="text"
               [value]="espacioForm().nombre"
               (input)="actualizarEspacioNombre($any($event.target).value)"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+              class="text-gray-600 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
               placeholder="Nombre del espacio" />
           </div>
           
@@ -497,11 +497,11 @@
                 type="checkbox"
                 [checked]="espacioForm().estado"
                 (change)="actualizarEspacioEstado($any($event.target).checked)"
-                class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
+                class="text-gray-600  w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
               <span class="text-sm text-gray-700">Desocupado (disponible)</span>
             </label>
           </div>
-        </div>
+        </div> 
         
         <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
           <button

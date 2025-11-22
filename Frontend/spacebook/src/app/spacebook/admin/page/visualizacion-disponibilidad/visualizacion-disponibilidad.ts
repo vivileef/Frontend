@@ -14,6 +14,13 @@ interface Institucion {
   horarioid?: string;
 }
 
+interface Horario {
+  horarioid: string;
+  horainicio: string;
+  horafin: string;
+  semana: string; // días separados por comas: "Lunes,Martes,Miércoles"
+}
+
 interface Seccion {
   seccionid: string;
   institucionid: string;
@@ -72,6 +79,10 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
   selectedInstitutionId = '';
   selectedSectionId = '';
   selectedSpaceId = '';
+  horarioInstitucion = signal<Horario | null>(null);
+  diasLaborables = signal<string[]>([]);
+  horaApertura = signal<string>('');
+  horaCierre = signal<string>('');
 
   // Datos desde Supabase
   instituciones = signal<Institucion[]>([]);
@@ -149,6 +160,7 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
       this.institutions = (data || []).map((inst: Institucion) => ({
         id: inst.institucionid,
         name: inst.nombre,
+        horarioid: inst.horarioid,
         sections: [] // Se cargarán cuando se seleccione
       }));
 
@@ -161,6 +173,43 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
       console.error('Error:', error);
     } finally {
       this.cargando.set(false);
+    }
+  }
+
+  async cargarHorarioInstitucion(horarioid: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from('horario')
+        .select('*')
+        .eq('horarioid', horarioid)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        this.horarioInstitucion.set(data);
+        
+        // Parsear días laborables
+        const dias = data.semana ? data.semana.split(',').map((d: string) => d.trim()) : [];
+        this.diasLaborables.set(dias);
+        
+        // Extraer horas (formato HH:MM:SS, tomamos HH:MM)
+        this.horaApertura.set(data.horainicio ? data.horainicio.substring(0, 5) : '08:00');
+        this.horaCierre.set(data.horafin ? data.horafin.substring(0, 5) : '18:00');
+        
+        console.log('Horario cargado:', {
+          dias: this.diasLaborables(),
+          apertura: this.horaApertura(),
+          cierre: this.horaCierre()
+        });
+      }
+    } catch (error: any) {
+      console.error('Error al cargar horario:', error);
+      // Usar valores por defecto si no hay horario
+      this.horarioInstitucion.set(null);
+      this.diasLaborables.set(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']);
+      this.horaApertura.set('08:00');
+      this.horaCierre.set('18:00');
     }
   }
 
@@ -360,6 +409,24 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
     return [];
   }
 
+  esDiaLaborable(day: CalendarDay): boolean {
+    if (!day.isCurrentMonth) return false;
+    
+    const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const fecha = new Date(day.year, day.month, day.date);
+    const nombreDia = diasSemana[fecha.getDay()];
+    
+    const laborables = this.diasLaborables();
+    return laborables.length > 0 ? laborables.includes(nombreDia) : true;
+  }
+
+  obtenerHorarioDelDia(day: CalendarDay): string {
+    if (!this.esDiaLaborable(day)) {
+      return 'Cerrado';
+    }
+    return `${this.horaApertura()} - ${this.horaCierre()}`;
+  }
+
   previousMonth(): void {
     this.currentDate = new Date(
       this.currentDate.getFullYear(),
@@ -388,7 +455,19 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
   async selectInstitution(institution: any): Promise<void> {
     this.selectedInstitution = institution.name;
     this.selectedInstitutionId = institution.id;
+    
+    // Cargar horario de la institución
+    if (institution.horarioid) {
+      await this.cargarHorarioInstitucion(institution.horarioid);
+    } else {
+      // Usar horario por defecto
+      this.diasLaborables.set(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']);
+      this.horaApertura.set('08:00');
+      this.horaCierre.set('18:00');
+    }
+    
     await this.cargarSecciones(institution.id);
+    this.generateCalendar(); // Regenerar calendario con el nuevo horario
   }
 
   async selectSection(section: any): Promise<void> {
