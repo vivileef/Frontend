@@ -6,7 +6,7 @@ export interface Institucion {
   direccion?: string;
   servicio?: string;
   horarioid?: string;
-  imagenUrl?: string[];
+  imagen_url?: string[]; // Array de URLs de imágenes en Storage
 }
 
 export interface CreateInstitucionDTO {
@@ -14,11 +14,10 @@ export interface CreateInstitucionDTO {
   tipo?: string;
   direccion?: string;
   servicio?: string;
-  imagenUrl?: string;
   horarioid?: string;
+  imagen_url?: string[]; // Array de URLs de imágenes en Storage
 }
 
 export interface UpdateInstitucionDTO extends Partial<CreateInstitucionDTO> {
   institucionid: string;
-  horarioid?: string;
 }

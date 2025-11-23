@@ -1,7 +1,7 @@
-import { Injectable } from '@angular/core';
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { environment } from '../../../../environments/environment';
+import { Injectable, inject } from '@angular/core';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { Notificacion, CreateNotificacionDTO, UpdateNotificacionDTO } from '../../models/interfaces';
+import { SupabaseService } from '../supabase.service';
 
 @Injectable({
   providedIn: 'root'
@@ -10,7 +10,8 @@ export class NotificacionService {
   private supabase: SupabaseClient;
 
   constructor() {
-    this.supabase = createClient(environment.apiUrl, environment.apiKey);
+    const supabaseService = inject(SupabaseService);
+    this.supabase = supabaseService.getClient();
   }
 
   async getNotificaciones(usuarioId?: string): Promise<Notificacion[]> {

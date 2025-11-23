@@ -1,7 +1,7 @@
-import { Injectable } from '@angular/core';
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { environment } from '../../../../environments/environment';
+import { Injectable, inject } from '@angular/core';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { Institucion, CreateInstitucionDTO, UpdateInstitucionDTO } from '../../models/interfaces';
+import { SupabaseService } from '../supabase.service';
 
 @Injectable({
   providedIn: 'root'
@@ -10,7 +10,8 @@ export class InstitucionService {
   private supabase: SupabaseClient;
 
   constructor() {
-    this.supabase = createClient(environment.apiUrl, environment.apiKey);
+    const supabaseService = inject(SupabaseService);
+    this.supabase = supabaseService.getClient();
   }
 
   async getInstituciones(): Promise<Institucion[]> {
@@ -40,7 +41,7 @@ export class InstitucionService {
       tipo: institucion.tipo,
       direccion: institucion.direccion,
       servicio: institucion.servicio,
-      imagenUrl: institucion.imagenUrl ? [institucion.imagenUrl] : []
+      imagen_url: institucion.imagen_url || []
     };
     
     if (institucion.horarioid) {
@@ -68,7 +69,7 @@ export class InstitucionService {
       tipo: updates.tipo,
       direccion: updates.direccion,
       servicio: updates.servicio,
-      imagenUrl: updates.imagenUrl ? [updates.imagenUrl] : []
+      imagen_url: updates.imagen_url !== undefined ? updates.imagen_url : undefined
     };
     
     if (updates.horarioid !== undefined) {

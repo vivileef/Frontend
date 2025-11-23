@@ -1,8 +1,8 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, signal, computed, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { environment } from '../../../../../environments/environment';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseService } from '../../../../shared/services/supabase.service';
 
 interface Institucion {
   institucionid: string;
@@ -141,7 +141,8 @@ export class CalendarioDisponibilidad implements OnInit {
   });
 
   constructor() {
-    this.supabase = createClient(environment.apiUrl, environment.apiKey);
+    const supabaseService = inject(SupabaseService);
+    this.supabase = supabaseService.getClient();
   }
 
   ngOnInit() {

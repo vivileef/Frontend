@@ -1,6 +1,6 @@
-import { Injectable, signal, WritableSignal } from '@angular/core';
-import { createClient, SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { environment } from '../../../environments/environment';
+import { Injectable, signal, WritableSignal, inject } from '@angular/core';
+import { SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { SupabaseService } from './supabase.service';
 
 export interface UserProfile {
   usuarioid: string;
@@ -23,21 +23,6 @@ export interface AdminProfile {
   telefono: number;
 }
 
-// Custom storage adapter sin locks - implementación sincrónica
-class CustomStorage {
-  getItem(key: string): string | null {
-    return sessionStorage.getItem(key);
-  }
-
-  setItem(key: string, value: string): void {
-    sessionStorage.setItem(key, value);
-  }
-
-  removeItem(key: string): void {
-    sessionStorage.removeItem(key);
-  }
-}
-
 export class Auth {
   private supabase: SupabaseClient;
   // Señal con la sesión actual (null si no hay sesión)
@@ -51,18 +36,9 @@ export class Auth {
   ];
 
   constructor() {
-    // Limpiar cualquier sesión previa problemática
-    this.clearSupabaseStorage();
-
-    this.supabase = createClient(environment.apiUrl, environment.apiKey, {
-      auth: {
-        storage: new CustomStorage() as any,
-        storageKey: 'spacebook-auth',
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: false
-      }
-    });
+    // Usar la instancia compartida de Supabase
+    const supabaseService = inject(SupabaseService);
+    this.supabase = supabaseService.getClient();
 
     this.session = signal<Session | null>(null);
     this.profile = signal<UserProfile | null>(null);

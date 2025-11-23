@@ -24,6 +24,12 @@ export class CatalogoEspacios implements OnInit {
   // Estados
   cargando = signal(true);
   error = signal('');
+  
+  // Carrusel de imágenes institución
+  indiceImagenInstitucion = signal(0);
+  
+  // Carrusel de imágenes por sección
+  indicesImagenesSeccion = new Map<string, number>();
 
   private dbService = inject(DatabaseService);
 
@@ -50,6 +56,8 @@ export class CatalogoEspacios implements OnInit {
       this.cargando.set(true);
       this.error.set('');
       this.institucionSeleccionada.set(institucion);
+      this.indiceImagenInstitucion.set(0);
+      this.indicesImagenesSeccion.clear();
       
       // Cargar secciones de la institución
       const secciones = await this.dbService.getSecciones(institucion.institucionid);
@@ -90,5 +98,63 @@ export class CatalogoEspacios implements OnInit {
 
   obtenerEstadoClase(estado?: boolean): string {
     return estado === true ? 'bg-green-100 text-green-800' : estado === false ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800';
+  }
+
+  // Métodos para carrusel de institución
+  siguienteImagenInstitucion() {
+    const inst = this.institucionSeleccionada();
+    if (!inst?.imagen_url || inst.imagen_url.length === 0) return;
+    
+    const indiceActual = this.indiceImagenInstitucion();
+    const nuevoIndice = (indiceActual + 1) % inst.imagen_url.length;
+    this.indiceImagenInstitucion.set(nuevoIndice);
+  }
+
+  anteriorImagenInstitucion() {
+    const inst = this.institucionSeleccionada();
+    if (!inst?.imagen_url || inst.imagen_url.length === 0) return;
+    
+    const indiceActual = this.indiceImagenInstitucion();
+    const nuevoIndice = indiceActual === 0 ? inst.imagen_url.length - 1 : indiceActual - 1;
+    this.indiceImagenInstitucion.set(nuevoIndice);
+  }
+
+  irAImagenInstitucion(indice: number) {
+    this.indiceImagenInstitucion.set(indice);
+  }
+
+  // Métodos para carrusel de secciones
+  obtenerIndiceImagenSeccion(seccionId: string): number {
+    return this.indicesImagenesSeccion.get(seccionId) || 0;
+  }
+
+  siguienteImagenSeccion(seccion: Seccion) {
+    if (!seccion.seccion_url || seccion.seccion_url.length === 0) return;
+    
+    const indiceActual = this.obtenerIndiceImagenSeccion(seccion.seccionid);
+    const nuevoIndice = (indiceActual + 1) % seccion.seccion_url.length;
+    this.indicesImagenesSeccion.set(seccion.seccionid, nuevoIndice);
+  }
+
+  anteriorImagenSeccion(seccion: Seccion) {
+    if (!seccion.seccion_url || seccion.seccion_url.length === 0) return;
+    
+    const indiceActual = this.obtenerIndiceImagenSeccion(seccion.seccionid);
+    const nuevoIndice = indiceActual === 0 ? seccion.seccion_url.length - 1 : indiceActual - 1;
+    this.indicesImagenesSeccion.set(seccion.seccionid, nuevoIndice);
+  }
+
+  irAImagenSeccion(seccionId: string, indice: number) {
+    this.indicesImagenesSeccion.set(seccionId, indice);
+  }
+
+  // Obtener espacios por sección
+  obtenerEspaciosDeSeccion(seccionId: string): Espacio[] {
+    return this.espacios().filter(e => e.seccionid === seccionId);
+  }
+
+  // Contar espacios disponibles por sección
+  contarEspaciosDisponibles(seccionId: string): number {
+    return this.obtenerEspaciosDeSeccion(seccionId).filter(e => e.estado === true).length;
   }
 }

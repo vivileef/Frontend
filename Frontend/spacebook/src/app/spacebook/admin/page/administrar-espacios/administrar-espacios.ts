@@ -1,8 +1,9 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { environment } from '../../../../../environments/environment';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { StorageService } from '../../../../shared/services/storage.service';
+import { SupabaseService } from '../../../../shared/services/supabase.service';
 
 interface Institucion {
   institucionid: string;
@@ -11,6 +12,7 @@ interface Institucion {
   direccion: string;
   servicio: string;
   horarioid?: string;
+  imagen_url?: string[]; // Array de URLs
 }
 
 interface Seccion {
@@ -21,6 +23,7 @@ interface Seccion {
   calificacion: number;
   institucionid: string;
   amenidades: string;
+  seccion_url?: string[]; // Array de URLs
 }
 
 interface Espacio {
@@ -102,8 +105,19 @@ export class AdministrarEspacios implements OnInit {
   error = signal<string>('');
   mensajeExito = signal<string>('');
 
-  constructor() {
-    this.supabase = createClient(environment.apiUrl, environment.apiKey);
+  // Manejo de imágenes instituciones (múltiples)
+  archivosSeleccionados: File[] = [];
+  previsualizacionImagenes: string[] = [];
+  subiendoImagen = signal<boolean>(false);
+
+  // Manejo de imágenes secciones (múltiples)
+  archivosSeleccionadosSeccion: File[] = [];
+  previsualizacionImagenesSeccion: string[] = [];
+
+  private supabaseService = inject(SupabaseService);
+
+  constructor(private storageService: StorageService) {
+    this.supabase = this.supabaseService.getClient();
   }
 
   ngOnInit() {
@@ -206,9 +220,25 @@ export class AdministrarEspacios implements OnInit {
 
     try {
       this.cargando.set(true);
+      this.subiendoImagen.set(true);
       this.error.set('');
 
       const horarioId = this.horarioSeleccionado() || null;
+      let imagenesUrls: string[] = [];
+
+      // Subir imágenes si hay archivos seleccionados
+      if (this.archivosSeleccionados.length > 0) {
+        try {
+          imagenesUrls = await this.storageService.uploadMultipleFiles(this.archivosSeleccionados, 'institucion');
+          console.log(`${imagenesUrls.length} imagen(es) subida(s) exitosamente`);
+        } catch (uploadError) {
+          console.error('Error al subir imágenes:', uploadError);
+          this.error.set('Error al subir las imágenes');
+          this.cargando.set(false);
+          this.subiendoImagen.set(false);
+          return;
+        }
+      }
 
       if (this.modoInstitucion() === 'crear') {
         const { error } = await this.supabase
@@ -218,14 +248,27 @@ export class AdministrarEspacios implements OnInit {
             tipo: form.tipo || null,
             direccion: form.direccion || null,
             servicio: form.servicio || null,
-            horarioid: horarioId
+            horarioid: horarioId,
+            imagen_url: imagenesUrls.length > 0 ? imagenesUrls : []
           }]);
 
         if (error) throw error;
-        this.mensajeExito.set('Institución creada exitosamente');
+        this.mensajeExito.set(`Institución creada exitosamente${imagenesUrls.length > 0 ? ` con ${imagenesUrls.length} imagen(es)` : ''}`);
       } else {
         const institucion = this.institucionSeleccionada();
         if (!institucion) return;
+
+        // Si hay nuevas imágenes y existían anteriores, eliminar las anteriores
+        if (imagenesUrls.length > 0 && institucion.imagen_url && institucion.imagen_url.length > 0) {
+          try {
+            await this.storageService.deleteMultipleFiles(institucion.imagen_url);
+          } catch (deleteError) {
+            console.error('Error al eliminar imágenes anteriores:', deleteError);
+          }
+        }
+
+        // Usar las nuevas imágenes si existen, sino mantener las anteriores
+        const finalImageUrls = imagenesUrls.length > 0 ? imagenesUrls : (institucion.imagen_url || []);
 
         const { error } = await this.supabase
           .from('institucion')
@@ -234,12 +277,13 @@ export class AdministrarEspacios implements OnInit {
             tipo: form.tipo || null,
             direccion: form.direccion || null,
             servicio: form.servicio || null,
-            horarioid: horarioId
+            horarioid: horarioId,
+            imagen_url: finalImageUrls
           })
           .eq('institucionid', institucion.institucionid);
 
         if (error) throw error;
-        this.mensajeExito.set('Institución actualizada exitosamente');
+        this.mensajeExito.set(`Institución actualizada exitosamente${imagenesUrls.length > 0 ? ` con ${imagenesUrls.length} nueva(s) imagen(es)` : ''}`);
       }
 
       await this.cargarInstituciones();
@@ -247,6 +291,7 @@ export class AdministrarEspacios implements OnInit {
       setTimeout(() => {
         this.cerrarModalInstitucion();
         this.mensajeExito.set('');
+        this.limpiarImagenes();
       }, 1500);
 
     } catch (error: any) {
@@ -254,6 +299,7 @@ export class AdministrarEspacios implements OnInit {
       console.error('Error:', error);
     } finally {
       this.cargando.set(false);
+      this.subiendoImagen.set(false);
     }
   }
 
@@ -265,6 +311,17 @@ export class AdministrarEspacios implements OnInit {
     try {
       this.cargando.set(true);
       this.error.set('');
+
+      // Eliminar imágenes del storage si existen
+      if (institucion.imagen_url && institucion.imagen_url.length > 0) {
+        try {
+          await this.storageService.deleteMultipleFiles(institucion.imagen_url);
+          console.log(`${institucion.imagen_url.length} imagen(es) eliminada(s) del storage`);
+        } catch (storageError) {
+          console.error('Error al eliminar imágenes del storage:', storageError);
+          // Continuar con la eliminación de la institución aunque fallen las imágenes
+        }
+      }
 
       const { error } = await this.supabase
         .from('institucion')
@@ -359,6 +416,7 @@ export class AdministrarEspacios implements OnInit {
     });
     this.amenidadesLista.set(['']);
     this.seccionSeleccionada.set(null);
+    this.limpiarImagenesSeccion();
   }
 
   async guardarSeccion() {
@@ -383,6 +441,22 @@ export class AdministrarEspacios implements OnInit {
     try {
       this.cargando.set(true);
       this.error.set('');
+      
+      // Manejar subida de imágenes
+      let imagenesUrls: string[] = [];
+      if (this.archivosSeleccionadosSeccion.length > 0) {
+        this.subiendoImagen.set(true);
+        try {
+          imagenesUrls = await this.storageService.uploadMultipleFiles(this.archivosSeleccionadosSeccion, 'seccion');
+          console.log('Imágenes subidas:', imagenesUrls);
+        } catch (uploadError) {
+          console.error('Error al subir imágenes:', uploadError);
+          this.error.set('Error al subir las imágenes');
+          return;
+        } finally {
+          this.subiendoImagen.set(false);
+        }
+      }
 
       if (this.modoSeccion() === 'crear') {
         // Crear la sección
@@ -394,7 +468,8 @@ export class AdministrarEspacios implements OnInit {
             capacidad: form.capacidad || 0,
             calificacion: form.calificacion || 0,
             amenidades: amenidadesString || null,
-            institucionid: institucion.institucionid
+            institucionid: institucion.institucionid,
+            seccion_url: imagenesUrls.length > 0 ? imagenesUrls : []
           }])
           .select()
           .single();
@@ -432,6 +507,23 @@ export class AdministrarEspacios implements OnInit {
 
         const capacidadAnterior = seccion.capacidad;
         const capacidadNueva = form.capacidad || 0;
+        
+        // Determinar URLs finales
+        let urlsFinales: string[] = [];
+        if (imagenesUrls.length > 0) {
+          // Si hay nuevas imágenes, eliminar las antiguas y usar las nuevas
+          if (seccion.seccion_url && seccion.seccion_url.length > 0) {
+            try {
+              await this.storageService.deleteMultipleFiles(seccion.seccion_url);
+            } catch (deleteError) {
+              console.error('Error al eliminar imágenes antiguas:', deleteError);
+            }
+          }
+          urlsFinales = imagenesUrls;
+        } else {
+          // Si no hay nuevas imágenes, mantener las existentes
+          urlsFinales = seccion.seccion_url || [];
+        }
 
         // Actualizar la sección
         const { error } = await this.supabase
@@ -441,7 +533,8 @@ export class AdministrarEspacios implements OnInit {
             tipo: form.tipo || null,
             capacidad: capacidadNueva,
             calificacion: form.calificacion || 0,
-            amenidades: amenidadesString || null
+            amenidades: amenidadesString || null,
+            seccion_url: urlsFinales
           })
           .eq('seccionid', seccion.seccionid);
 
@@ -496,6 +589,17 @@ export class AdministrarEspacios implements OnInit {
     try {
       this.cargando.set(true);
       this.error.set('');
+
+      // Eliminar imágenes del storage si existen
+      if (seccion.seccion_url && seccion.seccion_url.length > 0) {
+        try {
+          await this.storageService.deleteMultipleFiles(seccion.seccion_url);
+          console.log('Imágenes de sección eliminadas del storage');
+        } catch (storageError) {
+          console.error('Error al eliminar imágenes del storage:', storageError);
+          // Continuar con la eliminación de la sección aunque falle el borrado de imágenes
+        }
+      }
 
       const { error } = await this.supabase
         .from('seccion')
@@ -781,5 +885,97 @@ export class AdministrarEspacios implements OnInit {
   limpiarMensajes() {
     this.error.set('');
     this.mensajeExito.set('');
+  }
+
+  // ==================== MANEJO DE IMÁGENES (MÚLTIPLES) ====================
+  onFileSelected(event: any): void {
+    const files = Array.from(event.target.files || []) as File[];
+    
+    if (files.length === 0) return;
+
+    // Validar cada archivo
+    for (const file of files) {
+      // Validar que sea una imagen
+      if (!file.type.startsWith('image/')) {
+        this.error.set('Por favor selecciona solo archivos de imagen válidos');
+        return;
+      }
+
+      // Validar tamaño (máx 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        this.error.set('Cada imagen no debe superar los 5MB');
+        return;
+      }
+    }
+
+    // Agregar archivos a la lista
+    this.archivosSeleccionados.push(...files);
+
+    // Crear previsualizaciones
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        this.previsualizacionImagenes.push(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    console.log(`${files.length} archivo(s) seleccionado(s)`);
+  }
+
+  eliminarImagenPrevia(index: number): void {
+    this.archivosSeleccionados.splice(index, 1);
+    this.previsualizacionImagenes.splice(index, 1);
+  }
+
+  limpiarImagenes(): void {
+    this.archivosSeleccionados = [];
+    this.previsualizacionImagenes = [];
+  }
+
+  // ==================== MANEJO DE IMÁGENES SECCIONES (MÚLTIPLES) ====================
+  onFileSelectedSeccion(event: any): void {
+    const files = Array.from(event.target.files || []) as File[];
+    
+    if (files.length === 0) return;
+
+    // Validar cada archivo
+    for (const file of files) {
+      // Validar que sea una imagen
+      if (!file.type.startsWith('image/')) {
+        this.error.set('Por favor selecciona solo archivos de imagen válidos');
+        return;
+      }
+
+      // Validar tamaño (máx 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        this.error.set('Cada imagen no debe superar los 5MB');
+        return;
+      }
+    }
+
+    // Agregar archivos a la lista
+    this.archivosSeleccionadosSeccion.push(...files);
+
+    // Crear previsualizaciones
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        this.previsualizacionImagenesSeccion.push(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    console.log(`${files.length} archivo(s) de sección seleccionado(s)`);
+  }
+
+  eliminarImagenPreviaSeccion(index: number): void {
+    this.archivosSeleccionadosSeccion.splice(index, 1);
+    this.previsualizacionImagenesSeccion.splice(index, 1);
+  }
+
+  limpiarImagenesSeccion(): void {
+    this.archivosSeleccionadosSeccion = [];
+    this.previsualizacionImagenesSeccion = [];
   }
 }
