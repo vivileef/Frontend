@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../../../../shared/services/supabase.service';
+import { ActivityLogService } from '../../../../shared/services/activity-log.service';
 
 // Interfaces de Base de Datos
 interface Institucion {
@@ -72,6 +73,7 @@ interface CalendarEvent {
 })
 export class VisualizacionDisponibilidadComponent implements OnInit {
   private supabase: SupabaseClient;
+  private activityLog = inject(ActivityLogService);
 
   // Datos de contexto
   selectedInstitution = '';
@@ -266,11 +268,19 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
 
       const section = this.sections.find(s => s.id === seccionId);
       if (section) {
-        section.spaces = (data || []).map((esp: Espacio) => ({
-          id: esp.espacioid,
-          name: esp.nombre,
-          capacity: 0, // No tenemos capacidad en la tabla espacio
-          type: '' // Podemos obtenerlo de la sección
+        section.spaces = await Promise.all((data || []).map(async (esp: Espacio) => {
+          // Contar cuántos espacioshora tiene este espacio
+          const { count, error: countError } = await this.supabase
+            .from('espaciohora')
+            .select('*', { count: 'exact', head: true })
+            .eq('espacioid', esp.espacioid);
+          
+          return {
+            id: esp.espacioid,
+            name: esp.nombre,
+            capacity: count || 0, // Total de espacioshora
+            type: '' // Podemos obtenerlo de la sección
+          };
         }));
         section.count = section.spaces.length;
       }
@@ -552,74 +562,128 @@ export class VisualizacionDisponibilidadComponent implements OnInit {
       return;
     }
 
-    if (!this.selectedSpaceId) {
-      alert('No hay un espacio seleccionado');
+    if (!this.selectedInstitutionId) {
+      alert('No hay una institución seleccionada');
       return;
     }
 
     try {
       this.cargando.set(true);
 
-      const [day, month, year] = this.editFormData.selectedDate.split('/').map(Number);
-      const fechaInicio = new Date(year, month - 1, day);
-      
-      // Agregar hora de inicio
-      const [horaInicio, minutoInicio] = this.editFormData.startTime.split(':').map(Number);
-      fechaInicio.setHours(horaInicio, minutoInicio, 0);
+      // Validar que hora fin sea mayor que hora inicio
+      const [horaInicioH, horaInicioM] = this.editFormData.startTime.split(':').map(Number);
+      const [horaFinH, horaFinM] = this.editFormData.endTime.split(':').map(Number);
+      const minutosInicio = horaInicioH * 60 + horaInicioM;
+      const minutosFin = horaFinH * 60 + horaFinM;
 
-      // Crear fecha fin
-      const fechaFin = new Date(fechaInicio);
-      const [horaFin, minutoFin] = this.editFormData.endTime.split(':').map(Number);
-      fechaFin.setHours(horaFin, minutoFin, 0);
-
-      if (this.editFormData.status === 'occupied') {
-        // Crear una reserva nueva
-        const { data: reservaData, error: reservaError } = await this.supabase
-          .from('reserva')
-          .insert({
-            fecha_inicio: fechaInicio.toISOString(),
-            fecha_fin: fechaFin.toISOString(),
-            costo: 0,
-            usuarioid: null // Reserva administrativa sin usuario específico
-          })
-          .select()
-          .single();
-
-        if (reservaError) throw reservaError;
-
-        // Actualizar el espacio con la reserva
-        const { error: espacioError } = await this.supabase
-          .from('espacio')
-          .update({
-            reservaid: reservaData.reservaid,
-            estado: false // Ocupado
-          })
-          .eq('espacioid', this.selectedSpaceId);
-
-        if (espacioError) throw espacioError;
-
-        alert(`✅ Reserva creada exitosamente\n\n${this.selectedSpace}\n${this.editFormData.selectedDate}\n${this.editFormData.startTime} - ${this.editFormData.endTime}`);
-      } else {
-        // Marcar como disponible - eliminar reserva si existe
-        const { error: espacioError } = await this.supabase
-          .from('espacio')
-          .update({
-            reservaid: null,
-            estado: true // Disponible
-          })
-          .eq('espacioid', this.selectedSpaceId);
-
-        if (espacioError) throw espacioError;
-
-        alert(`✅ Espacio marcado como disponible\n\n${this.selectedSpace}\n${this.editFormData.selectedDate}`);
+      if (minutosFin <= minutosInicio) {
+        alert('La hora de fin debe ser mayor que la hora de inicio');
+        this.cargando.set(false);
+        return;
       }
 
-      // Recargar reservas
-      await this.cargarReservasDelEspacio(this.selectedSpaceId);
+      const estadoDeseado = this.editFormData.status === 'occupied' ? false : true; // false = ocupado, true = disponible
+
+      // 1. Obtener todas las secciones de la institución
+      const { data: secciones, error: seccionesError } = await this.supabase
+        .from('seccion')
+        .select('seccionid')
+        .eq('institucionid', this.selectedInstitutionId);
+
+      if (seccionesError) throw seccionesError;
+
+      if (!secciones || secciones.length === 0) {
+        alert('No hay secciones en esta institución');
+        this.cargando.set(false);
+        return;
+      }
+
+      const seccionIds = secciones.map(s => s.seccionid);
+
+      // 2. Obtener todos los espacios de esas secciones
+      const { data: espacios, error: espaciosError } = await this.supabase
+        .from('espacio')
+        .select('espacioid')
+        .in('seccionid', seccionIds);
+
+      if (espaciosError) throw espaciosError;
+
+      if (!espacios || espacios.length === 0) {
+        alert('No hay espacios en esta institución');
+        this.cargando.set(false);
+        return;
+      }
+
+      const espacioIds = espacios.map(e => e.espacioid);
+
+      // 3. Obtener todos los espacioshora que estén en el rango de tiempo
+      const horaInicioFormato = this.editFormData.startTime + ':00'; // HH:MM:SS
+      const horaFinFormato = this.editFormData.endTime + ':00'; // HH:MM:SS
+
+      const { data: espaciosHora, error: espaciosHoraError } = await this.supabase
+        .from('espaciohora')
+        .select('espaciohoraid, horainicio, horafin')
+        .in('espacioid', espacioIds);
+
+      if (espaciosHoraError) throw espaciosHoraError;
+
+      if (!espaciosHora || espaciosHora.length === 0) {
+        alert('No hay bloques horarios configurados en esta institución');
+        this.cargando.set(false);
+        return;
+      }
+
+      // 4. Filtrar los espacioshora que se solapan con el rango seleccionado
+      const espaciosHoraAfectados = espaciosHora.filter(eh => {
+        // Convertir horarios a minutos para comparar
+        const [hiH, hiM, hiS] = eh.horainicio.split(':').map(Number);
+        const [hfH, hfM, hfS] = eh.horafin.split(':').map(Number);
+        const minutosInicioBloque = hiH * 60 + hiM;
+        const minutosFinBloque = hfH * 60 + hfM;
+
+        // Verificar solapamiento
+        // Un bloque se solapa si:
+        // - Comienza antes de que termine el rango seleccionado Y
+        // - Termina después de que comience el rango seleccionado
+        return minutosInicioBloque < minutosFin && minutosFinBloque > minutosInicio;
+      });
+
+      if (espaciosHoraAfectados.length === 0) {
+        alert('No hay bloques horarios en el rango de tiempo seleccionado');
+        this.cargando.set(false);
+        return;
+      }
+
+      // 5. Actualizar el estado de todos los espacioshora afectados
+      const promesas = espaciosHoraAfectados.map(eh => {
+        return this.supabase
+          .from('espaciohora')
+          .update({ estado: estadoDeseado })
+          .eq('espaciohoraid', eh.espaciohoraid);
+      });
+
+      const resultados = await Promise.all(promesas);
+
+      // Verificar si hubo errores
+      const errores = resultados.filter(r => r.error);
+      if (errores.length > 0) {
+        console.error('Errores al actualizar:', errores);
+        throw new Error('Algunos bloques no se pudieron actualizar');
+      }
+
+      const estadoTexto = estadoDeseado ? 'disponibles' : 'ocupados';
+      alert(`✅ Éxito\n\nSe marcaron ${espaciosHoraAfectados.length} bloques horarios como ${estadoTexto}\n\nFecha: ${this.editFormData.selectedDate}\nHorario: ${this.editFormData.startTime} - ${this.editFormData.endTime}\nInstitución: ${this.selectedInstitution}`);
+      
+      this.activityLog.registrar(
+        'disponibilidad_editada', 
+        'Disponibilidad actualizada', 
+        `${espaciosHoraAfectados.length} bloques marcados como ${estadoTexto} en "${this.selectedInstitution}" (${this.editFormData.startTime}-${this.editFormData.endTime})`
+      );
+
       this.closeEditModal();
 
     } catch (error: any) {
-      alert('Error al guardar: ' + error.message);
+      alert('❌ Error al guardar: ' + error.message);
       console.error('Error:', error);
     } finally {
       this.cargando.set(false);

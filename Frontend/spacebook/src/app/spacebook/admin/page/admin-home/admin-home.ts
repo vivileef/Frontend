@@ -1,8 +1,9 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Auth } from '../../../../shared/services/auth.service';
 import { DatabaseService } from '../../../../shared/services/database.service';
+import { ActivityLogService, ActividadLog } from '../../../../shared/services/activity-log.service';
 
 interface ActividadReciente {
   id: string;
@@ -153,41 +154,37 @@ interface ActividadReciente {
 
       <!-- Recent Activity -->
       <div class="bg-white rounded-xl shadow-md p-4 sm:p-6">
-        <h3 class="text-lg font-bold text-gray-900 mb-4">Actividad Reciente</h3>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-bold text-gray-900">Actividad Reciente</h3>
+          @if (actividadesAdmin().length > 0) {
+            <button 
+              (click)="limpiarActividades()"
+              class="text-xs text-gray-500 hover:text-red-600 transition-colors">
+              Limpiar todo
+            </button>
+          }
+        </div>
         
-        @if (cargandoActividad()) {
-          <div class="flex justify-center items-center py-8">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-          </div>
-        } @else if (actividadesRecientes().length === 0) {
+        @if (actividadesAdmin().length === 0) {
           <div class="text-center py-8 text-gray-500">
             <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
             </svg>
             <p class="text-sm">No hay actividad reciente</p>
+            <p class="text-xs text-gray-400 mt-1">Las acciones que realices se mostrarán aquí</p>
           </div>
         } @else {
-          <div class="space-y-4">
-            @for (actividad of actividadesRecientes(); track actividad.id) {
-              <div class="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                     [ngClass]="actividad.color">
-                  <svg class="w-5 h-5" [ngClass]="getIconColor(actividad.tipo)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    @if (actividad.tipo === 'reserva') {
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                    } @else if (actividad.tipo === 'espacio') {
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                    } @else if (actividad.tipo === 'incidencia') {
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                    } @else if (actividad.tipo === 'cancelacion') {
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    }
-                  </svg>
+          <div class="space-y-3 max-h-96 overflow-y-auto">
+            @for (actividad of actividadesAdmin(); track actividad.id) {
+              <div class="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                   [ngClass]="actividad.color">
+                <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-white">
+                  <span class="text-lg">{{ getEmojiForActivity(actividad.tipo) }}</span>
                 </div>
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium text-gray-900">{{ actividad.titulo }}</p>
-                  <p class="text-xs text-gray-500 truncate">{{ actividad.descripcion }}</p>
-                  <p class="text-xs text-gray-400 mt-1">{{ actividad.tiempo }}</p>
+                  <p class="text-xs text-gray-600 truncate">{{ actividad.descripcion }}</p>
+                  <p class="text-xs text-gray-400 mt-1">{{ activityLogService.formatearTiempo(actividad.timestamp) }}</p>
                 </div>
               </div>
             }
@@ -201,6 +198,7 @@ interface ActividadReciente {
 export class AdminHome implements OnInit {
   private auth = inject(Auth);
   private dbService = inject(DatabaseService);
+  activityLogService = inject(ActivityLogService);
   
   userProfile = this.auth.profile;
   
@@ -212,6 +210,16 @@ export class AdminHome implements OnInit {
   
   actividadesRecientes = signal<ActividadReciente[]>([]);
   cargandoActividad = signal(true);
+  
+  actividadesAdmin = signal<ActividadLog[]>([]);
+
+  constructor() {
+    // Efecto para actualizar actividades cuando cambien
+    effect(() => {
+      const actividades = this.activityLogService.actividades();
+      this.actividadesAdmin.set(actividades.slice(0, 10));
+    });
+  }
 
   async ngOnInit() {
     // Verificar y cargar perfil si es necesario
@@ -385,5 +393,36 @@ export class AdminHome implements OnInit {
       case 'cancelacion': return 'text-yellow-600';
       default: return 'text-gray-600';
     }
+  }
+
+  limpiarActividades(): void {
+    if (confirm('¿Estás seguro de que deseas limpiar todas las actividades?')) {
+      this.activityLogService.limpiar();
+    }
+  }
+
+  getEmojiForActivity(tipo: ActividadLog['tipo']): string {
+    const emojis: Record<ActividadLog['tipo'], string> = {
+      espacio_creado: '➕',
+      espacio_editado: '✏️',
+      espacio_eliminado: '🗑️',
+      espaciohora_creado: '🕐',
+      espaciohora_editado: '⏰',
+      espaciohora_eliminado: '❌',
+      espaciohora_regenerado: '🔄',
+      espaciohora_renombrado: '📝',
+      incidencia_creada: '⚠️',
+      incidencia_resuelta: '✅',
+      incidencia_eliminada: '🗑️',
+      disponibilidad_editada: '📅',
+      seccion_creada: '📁',
+      seccion_editada: '📂',
+      seccion_eliminada: '🗑️',
+      institucion_creada: '🏢',
+      institucion_editada: '🏛️',
+      horario_creado: '⏱️',
+      horario_editado: '⏲️'
+    };
+    return emojis[tipo] || 'ℹ️';
   }
 }

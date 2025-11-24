@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { StorageService } from '../../../../shared/services/storage.service';
 import { SupabaseService } from '../../../../shared/services/supabase.service';
+import { ActivityLogService } from '../../../../shared/services/activity-log.service';
 
 interface Institucion {
   institucionid: string;
@@ -63,6 +64,7 @@ type VistaSecundaria = 'instituciones' | 'secciones' | 'espacios';
 })
 export class AdministrarEspacios implements OnInit {
   private supabase: SupabaseClient;
+  private activityLog = inject(ActivityLogService);
   
   // Pestaña principal
   pestanaActiva = signal<'instituciones' | 'espacios-secciones'>('instituciones');
@@ -117,6 +119,18 @@ export class AdministrarEspacios implements OnInit {
   espaciosHora = signal<EspacioHora[]>([]);
   espacioSeleccionadoHora = signal<Espacio | null>(null);
   cargandoEspacioHora = signal<boolean>(false);
+
+  // Modal para editar espaciohora individual
+  mostrarModalEditarEspacioHora = signal<boolean>(false);
+  espacioHoraForm = signal<Partial<EspacioHora>>({
+    nombre: '',
+    estado: true
+  });
+  espacioHoraEnEdicion = signal<EspacioHora | null>(null);
+
+  // Modal para renombrar globalmente
+  mostrarModalRenombrarGlobal = signal<boolean>(false);
+  prefijoNombreGlobal = signal<string>('Bloque');
   
   // Estados generales
   cargando = signal<boolean>(false);
@@ -772,10 +786,12 @@ export class AdministrarEspacios implements OnInit {
           } else {
             console.log('EspacioHora insertados exitosamente:', espacioHoraData);
             this.mensajeExito.set(`Espacio creado exitosamente con ${espaciosHora.length} bloques horarios`);
+            this.activityLog.registrar('espacio_creado', 'Espacio creado', `"${form.nombre}" con ${espaciosHora.length} bloques horarios`);
           }
         } else {
           console.warn('No se pudo obtener horario de institución o no hay espacio data');
           this.mensajeExito.set('Espacio creado exitosamente (sin horario de institución)');
+          this.activityLog.registrar('espacio_creado', 'Espacio creado', `"${form.nombre}"`);
         }
       } else {
         if (!form.espacioid) return;
@@ -816,6 +832,7 @@ export class AdministrarEspacios implements OnInit {
         }
 
         this.mensajeExito.set('Espacio actualizado exitosamente');
+        this.activityLog.registrar('espacio_editado', 'Espacio editado', `"${form.nombre}" actualizado`);
       }
 
       await this.cargarEspacios(seccion);
@@ -946,6 +963,7 @@ export class AdministrarEspacios implements OnInit {
       if (error) throw error;
 
       this.mensajeExito.set('Espacio eliminado exitosamente');
+      this.activityLog.registrar('espacio_eliminado', 'Espacio eliminado', `"${espacio.nombre}" eliminado de la sección`);
       
       const seccion = this.seccionSeleccionada();
       if (seccion) {
@@ -1078,6 +1096,91 @@ export class AdministrarEspacios implements OnInit {
     this.espacioForm.set({ ...this.espacioForm(), horalimite: value });
   }
 
+  actualizarEspacioHoraNombre(value: string) {
+    this.espacioHoraForm.set({ ...this.espacioHoraForm(), nombre: value });
+  }
+
+  actualizarEspacioHoraEstado(value: boolean) {
+    this.espacioHoraForm.set({ ...this.espacioHoraForm(), estado: value });
+  }
+
+  // ==================== RENOMBRAR GLOBALMENTE ====================
+  abrirModalRenombrarGlobal() {
+    this.prefijoNombreGlobal.set('Bloque');
+    this.mostrarModalRenombrarGlobal.set(true);
+  }
+
+  cerrarModalRenombrarGlobal() {
+    this.mostrarModalRenombrarGlobal.set(false);
+    this.prefijoNombreGlobal.set('Bloque');
+  }
+
+  actualizarPrefijoNombreGlobal(value: string) {
+    this.prefijoNombreGlobal.set(value);
+  }
+
+  async renombrarTodosEspaciosHora() {
+    const espacio = this.espacioSeleccionadoHora();
+    const prefijo = this.prefijoNombreGlobal().trim();
+
+    if (!espacio) return;
+
+    if (!prefijo) {
+      this.error.set('El prefijo no puede estar vacío');
+      return;
+    }
+
+    if (!confirm(`¿Deseas renombrar todos los bloques de "${espacio.nombre}" con el prefijo "${prefijo}"?`)) {
+      return;
+    }
+
+    try {
+      this.cargandoEspacioHora.set(true);
+      this.error.set('');
+
+      // Obtener todos los bloques ordenados
+      const { data: bloques, error: bloquesError } = await this.supabase
+        .from('espaciohora')
+        .select('*')
+        .eq('espacioid', espacio.espacioid)
+        .order('horainicio', { ascending: true });
+
+      if (bloquesError) throw bloquesError;
+
+      if (!bloques || bloques.length === 0) {
+        this.error.set('No hay bloques para renombrar');
+        return;
+      }
+
+      // Renombrar cada bloque
+      const promesas = bloques.map((bloque, index) => {
+        return this.supabase
+          .from('espaciohora')
+          .update({ nombre: `${prefijo} ${index + 1}` })
+          .eq('espaciohoraid', bloque.espaciohoraid);
+      });
+
+      await Promise.all(promesas);
+
+      this.mensajeExito.set(`Se renombraron ${bloques.length} bloques exitosamente`);
+      this.activityLog.registrar('espaciohora_renombrado', 'Bloques renombrados', `${bloques.length} bloques de "${espacio.nombre}" renombrados con prefijo "${prefijo}"`);
+
+      // Recargar la lista
+      await this.cargarEspaciosHora(espacio.espacioid);
+
+      setTimeout(() => {
+        this.cerrarModalRenombrarGlobal();
+        this.mensajeExito.set('');
+      }, 1500);
+
+    } catch (error: any) {
+      console.error('Error al renombrar bloques:', error);
+      this.error.set('Error al renombrar los bloques');
+    } finally {
+      this.cargandoEspacioHora.set(false);
+    }
+  }
+
   // ==================== GESTIÓN DE ESPACIOHORA ====================
   async abrirModalEspacioHora(espacio: Espacio) {
     this.espacioSeleccionadoHora.set(espacio);
@@ -1113,13 +1216,233 @@ export class AdministrarEspacios implements OnInit {
     this.espaciosHora.set([]);
   }
 
+  // ==================== EDITAR ESPACIOHORA ====================
+  abrirModalEditarEspacioHora(espacioHora: EspacioHora) {
+    this.espacioHoraEnEdicion.set(espacioHora);
+    this.espacioHoraForm.set({
+      nombre: espacioHora.nombre,
+      estado: espacioHora.estado ?? true
+    });
+    this.mostrarModalEditarEspacioHora.set(true);
+  }
+
+  cerrarModalEditarEspacioHora() {
+    this.mostrarModalEditarEspacioHora.set(false);
+    this.espacioHoraEnEdicion.set(null);
+    this.espacioHoraForm.set({
+      nombre: '',
+      estado: true
+    });
+  }
+
+  async guardarEspacioHora() {
+    const form = this.espacioHoraForm();
+    const espacioHora = this.espacioHoraEnEdicion();
+
+    if (!espacioHora?.espaciohoraid) return;
+
+    if (!form.nombre?.trim()) {
+      this.error.set('El nombre es requerido');
+      return;
+    }
+
+    try {
+      this.cargandoEspacioHora.set(true);
+      this.error.set('');
+
+      const { error } = await this.supabase
+        .from('espaciohora')
+        .update({
+          nombre: form.nombre,
+          estado: form.estado ?? true
+        })
+        .eq('espaciohoraid', espacioHora.espaciohoraid);
+
+      if (error) throw error;
+
+      this.mensajeExito.set('Bloque horario actualizado exitosamente');
+      this.activityLog.registrar('espaciohora_editado', 'Bloque horario editado', `"${form.nombre}" actualizado`);
+      
+      // Recargar la lista
+      const espacio = this.espacioSeleccionadoHora();
+      if (espacio) {
+        await this.cargarEspaciosHora(espacio.espacioid);
+      }
+
+      setTimeout(() => {
+        this.cerrarModalEditarEspacioHora();
+        this.mensajeExito.set('');
+      }, 1500);
+
+    } catch (error: any) {
+      console.error('Error al guardar espaciohora:', error);
+      this.error.set('Error al guardar el bloque horario');
+    } finally {
+      this.cargandoEspacioHora.set(false);
+    }
+  }
+
+  // ==================== ELIMINAR ESPACIOHORA ====================
+  async eliminarEspacioHora(espacioHora: EspacioHora) {
+    if (!confirm(`¿Deseas eliminar el bloque "${espacioHora.nombre}"?`)) {
+      return;
+    }
+
+    try {
+      this.cargandoEspacioHora.set(true);
+      this.error.set('');
+
+      const { error } = await this.supabase
+        .from('espaciohora')
+        .delete()
+        .eq('espaciohoraid', espacioHora.espaciohoraid);
+
+      if (error) throw error;
+
+      this.mensajeExito.set('Bloque horario eliminado exitosamente');
+      this.activityLog.registrar('espaciohora_eliminado', 'Bloque horario eliminado', `"${espacioHora.nombre}" eliminado`);
+
+      // Recargar la lista
+      const espacio = this.espacioSeleccionadoHora();
+      if (espacio) {
+        await this.cargarEspaciosHora(espacio.espacioid);
+      }
+
+      setTimeout(() => {
+        this.mensajeExito.set('');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Error al eliminar espaciohora:', error);
+      this.error.set('Error al eliminar el bloque horario');
+    } finally {
+      this.cargandoEspacioHora.set(false);
+    }
+  }
+
+  // ==================== CREAR ESPACIOHORA UNO POR UNO ====================
+  async crearNuevoEspacioHora() {
+    const espacio = this.espacioSeleccionadoHora();
+    if (!espacio) return;
+
+    try {
+      this.cargandoEspacioHora.set(true);
+      this.error.set('');
+
+      // Obtener la sección para luego obtener el horario de la institución
+      const { data: espacioData, error: espacioError } = await this.supabase
+        .from('espacio')
+        .select('seccionid')
+        .eq('espacioid', espacio.espacioid)
+        .single();
+
+      if (espacioError) throw espacioError;
+
+      const { data: seccionData, error: seccionError } = await this.supabase
+        .from('seccion')
+        .select('institucionid')
+        .eq('seccionid', espacioData.seccionid)
+        .single();
+
+      if (seccionError) throw seccionError;
+
+      const horarioInstitucion = await this.obtenerHorarioInstitucion(seccionData.institucionid);
+
+      if (!horarioInstitucion) {
+        this.error.set('La institución no tiene horario configurado');
+        return;
+      }
+
+      // Obtener todos los bloques existentes ordenados
+      const { data: bloquesExistentes, error: bloquesError } = await this.supabase
+        .from('espaciohora')
+        .select('*')
+        .eq('espacioid', espacio.espacioid)
+        .order('horainicio', { ascending: true });
+
+      if (bloquesError) throw bloquesError;
+
+      const horaLimite = espacio.horalimite || 60;
+
+      // Convertir hora fin del horario de institución a minutos
+      const convertirAMinutos = (tiempo: string): number => {
+        const partes = tiempo.split(':');
+        const horas = parseInt(partes[0], 10);
+        const minutos = parseInt(partes[1], 10);
+        return horas * 60 + minutos;
+      };
+
+      const convertirAFormato = (minutos: number): string => {
+        const horas = Math.floor(minutos / 60);
+        const mins = minutos % 60;
+        return `${String(horas).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`;
+      };
+
+      const minutosFin = convertirAMinutos(horarioInstitucion.horafin);
+
+      // Determinar la hora de inicio del nuevo bloque
+      let minutosInicio: number;
+      let contador: number;
+
+      if (!bloquesExistentes || bloquesExistentes.length === 0) {
+        // Si no hay bloques, empezar desde el inicio del horario
+        minutosInicio = convertirAMinutos(horarioInstitucion.horainicio);
+        contador = 1;
+      } else {
+        // Obtener el último bloque
+        const ultimoBloque = bloquesExistentes[bloquesExistentes.length - 1];
+        minutosInicio = convertirAMinutos(ultimoBloque.horafin);
+        contador = bloquesExistentes.length + 1;
+      }
+
+      // Verificar si hay espacio para un nuevo bloque
+      if (minutosInicio + horaLimite > minutosFin) {
+        this.error.set('No hay espacio disponible para crear más bloques. Se alcanzó el límite del horario.');
+        return;
+      }
+
+      const horaInicioBloque = convertirAFormato(minutosInicio);
+      const horaFinBloque = convertirAFormato(minutosInicio + horaLimite);
+
+      // Crear el nuevo bloque
+      const { error: insertError } = await this.supabase
+        .from('espaciohora')
+        .insert([{
+          nombre: `Bloque ${contador}`,
+          horainicio: horaInicioBloque,
+          horafin: horaFinBloque,
+          espacioid: espacio.espacioid,
+          reservaid: null,
+          estado: true
+        }]);
+
+      if (insertError) throw insertError;
+
+      this.mensajeExito.set(`Bloque ${contador} creado: ${horaInicioBloque.substring(0, 5)} - ${horaFinBloque.substring(0, 5)}`);
+      this.activityLog.registrar('espaciohora_creado', 'Bloque horario creado', `"${espacio.nombre}" - Bloque ${contador}`);
+
+      // Recargar la lista
+      await this.cargarEspaciosHora(espacio.espacioid);
+
+      setTimeout(() => {
+        this.mensajeExito.set('');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Error al crear nuevo espaciohora:', error);
+      this.error.set('Error al crear el bloque horario');
+    } finally {
+      this.cargandoEspacioHora.set(false);
+    }
+  }
+
   formatearHora(hora: string): string {
     if (!hora) return '--:--';
     return hora.substring(0, 5); // De HH:MM:SS a HH:MM
   }
 
   async regenerarEspaciosHora(espacio: Espacio) {
-    if (!confirm(`¿Deseas regenerar los bloques horarios de "${espacio.nombre}"? Esto eliminará los bloques sin reserva.`)) {
+    if (!confirm(`¿Deseas regenerar los bloques horarios de "${espacio.nombre}"? Se mantendrán los bloques con reserva activa.`)) {
       return;
     }
 
@@ -1160,7 +1483,8 @@ export class AdministrarEspacios implements OnInit {
 
       if (error) throw error;
 
-      this.mensajeExito.set(`Se regeneraron ${espaciosHora.length} bloques horarios`);
+      this.mensajeExito.set(`Se regeneraron ${espaciosHora.length} bloques horarios (se mantuvieron las reservas activas)`);
+      this.activityLog.registrar('espaciohora_regenerado', 'Bloques regenerados', `${espaciosHora.length} bloques de "${espacio.nombre}" regenerados (conservando reservas)`);
       await this.cargarEspaciosHora(espacio.espacioid);
 
       setTimeout(() => {
@@ -1169,6 +1493,63 @@ export class AdministrarEspacios implements OnInit {
 
     } catch (error: any) {
       console.error('Error al regenerar espaciohora:', error);
+      this.error.set('Error al regenerar bloques horarios');
+    } finally {
+      this.cargandoEspacioHora.set(false);
+    }
+  }
+
+  async regenerarTodoEspaciosHora(espacio: Espacio) {
+    if (!confirm(`⚠️ ATENCIÓN: Esto eliminará TODOS los bloques de "${espacio.nombre}", incluyendo los que tienen reservas activas. ¿Estás seguro?`)) {
+      return;
+    }
+
+    try {
+      this.cargandoEspacioHora.set(true);
+      const seccion = this.seccionSeleccionada();
+      
+      if (!seccion) {
+        this.error.set('No se encontró la sección');
+        return;
+      }
+
+      const horarioInstitucion = await this.obtenerHorarioInstitucion(seccion.institucionid);
+      
+      if (!horarioInstitucion) {
+        this.error.set('La institución no tiene horario configurado');
+        return;
+      }
+
+      // Eliminar TODOS los espaciohora (incluso con reserva)
+      await this.supabase
+        .from('espaciohora')
+        .delete()
+        .eq('espacioid', espacio.espacioid);
+
+      // Generar nuevos espaciohora
+      const espaciosHora = this.generarEspaciosHora(
+        espacio.espacioid,
+        horarioInstitucion.horainicio,
+        horarioInstitucion.horafin,
+        espacio.horalimite || 60
+      );
+
+      const { error } = await this.supabase
+        .from('espaciohora')
+        .insert(espaciosHora);
+
+      if (error) throw error;
+
+      this.mensajeExito.set(`Se regeneraron TODOS los bloques (${espaciosHora.length} bloques creados, se eliminaron las reservas)`);
+      this.activityLog.registrar('espaciohora_regenerado', 'Regeneración completa', `TODOS los bloques de "${espacio.nombre}" regenerados (${espaciosHora.length} nuevos, reservas eliminadas)`);
+      await this.cargarEspaciosHora(espacio.espacioid);
+
+      setTimeout(() => {
+        this.mensajeExito.set('');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Error al regenerar todo:', error);
       this.error.set('Error al regenerar bloques horarios');
     } finally {
       this.cargandoEspacioHora.set(false);
