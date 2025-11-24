@@ -15,6 +15,9 @@ import { MisReservasComponent } from './spacebook/user/page/mis-reservas/mis-res
 import { ComentariosComponent } from './spacebook/user/page/comentarios/comentarios';
 import { IncidenciasComponent } from './spacebook/user/page/incidencias/incidencias';
 import { NotificacionesComponent } from './spacebook/user/page/notificaciones/notificaciones';
+import { GestionarIncidenciasComponent } from './spacebook/admin/page/gestionar-incidencias/gestionar-incidencias';
+import { adminGuard } from './shared/guards/admin.guard';
+import { authGuard } from './shared/guards/auth.guard';
 
 export const routes: Routes = [
     {
@@ -32,6 +35,7 @@ export const routes: Routes = [
     {
         path: 'admin-dashboard',
         component: AdminDashboardComponent,
+        canActivate: [adminGuard],
         children: [
             {
                 path: '',
@@ -48,12 +52,17 @@ export const routes: Routes = [
             {
                 path: 'visualizacion-disponibilidad',
                 component: VisualizacionDisponibilidadComponent
+            },
+            {
+                path: 'incidencias',
+                component: GestionarIncidenciasComponent
             }
         ]
     },
     {
         path: 'user-dashboard',
         component: UserDashboardComponent,
+        canActivate: [authGuard],
         children: [
             {
                 path: '',

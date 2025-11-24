@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Auth } from '../../services/auth.service';
 import { CommonModule } from '@angular/common';
@@ -9,10 +9,10 @@ import { CommonModule } from '@angular/common';
   imports: [CommonModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <div class="min-h-screen bg-gray-100 flex">
-      <!-- Sidebar -->
-      <aside class="w-64 bg-red-700 text-white flex flex-col">
+      <!-- Sidebar - Fixed -->
+      <aside class="w-64 bg-red-700 text-white flex flex-col fixed left-0 top-0 h-screen z-10">
         <!-- Logo -->
-        <div class="p-6 border-b border-red-600">
+        <div class="p-6 border-b border-red-600 flex-shrink-0">
           <div class="flex items-center space-x-3">
             <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
               <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -26,8 +26,8 @@ import { CommonModule } from '@angular/common';
           </div>
         </div>
 
-        <!-- Navigation -->
-        <nav class="flex-1 p-4 space-y-2">
+        <!-- Navigation - Scrollable -->
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
           <a
             routerLink="/admin-dashboard"
             routerLinkActive="bg-red-600"
@@ -72,6 +72,17 @@ import { CommonModule } from '@angular/common';
             </svg>
             <span class="font-medium">Disponibilidad</span>
           </a>
+
+          <a
+            routerLink="/admin-dashboard/incidencias"
+            routerLinkActive="bg-red-600"
+            class="flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-red-600 transition-colors cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span class="font-medium">Incidencias</span>
+          </a>
         </nav>
 
         <!-- User Info -->
@@ -79,7 +90,7 @@ import { CommonModule } from '@angular/common';
           @if (userProfile()) {
             <div class="flex items-center space-x-3 mb-3">
               <div class="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center">
-                <span class="text-sm font-bold">{{ userProfile()?.nombre?.charAt(0) }}{{ userProfile()?.apellido?.charAt(0) }}</span>
+                <span class="text-sm font-bold">{{ getInitials() }}</span>
               </div>
               <div class="flex-1">
                 <p class="text-sm font-medium">{{ userProfile()?.nombre }} {{ userProfile()?.apellido }}</p>
@@ -100,7 +111,7 @@ import { CommonModule } from '@angular/common';
       </aside>
 
       <!-- Main Content -->
-      <div class="flex-1 flex flex-col">
+      <div class="flex-1 flex flex-col ml-64">
         <!-- Top Header -->
         <header class="bg-white shadow-sm">
           <div class="px-8 py-4">
@@ -109,10 +120,10 @@ import { CommonModule } from '@angular/common';
           </div>
         </header>
 
-      <!-- Main Content Area -->
-      <main class="flex-1 p-8 bg-gray-50 overflow-y-auto">
-        <router-outlet />
-      </main>
+        <!-- Main Content Area -->
+        <main class="flex-1 overflow-y-auto bg-gray-50">
+          <router-outlet />
+        </main>
       </div>
     </div>
   `,
@@ -123,13 +134,63 @@ export class AdminDashboardComponent implements OnInit {
   private router = inject(Router);
 
   userProfile = this.auth.profile;
+  cargando = signal(false);
 
-  ngOnInit() {
-    // Verificar si es admin, si no redirigir
+  async ngOnInit() {
+    console.log('AdminDashboard: Iniciando, perfil actual:', this.auth.profile());
+    
+    // Verificar y cargar perfil si es necesario
+    await this.verificarPerfil();
+    
+    // Verificar que sea admin
     if (!this.auth.isAdmin()) {
-      console.warn('Acceso denegado: No es administrador');
+      console.warn('AdminDashboard: No es administrador');
       this.router.navigate(['/user-dashboard']);
     }
+  }
+
+  async verificarPerfil() {
+    // Si ya hay perfil con nombre, no hacer nada
+    if (this.auth.profile()?.nombre) {
+      console.log('AdminDashboard: Perfil ya disponible');
+      return;
+    }
+
+    // Intentar cargar el perfil
+    try {
+      const session = await this.auth.getSession();
+      if (session?.user?.email) {
+        const email = session.user.email;
+        console.log('AdminDashboard: Cargando perfil para email:', email);
+        
+        if (this.auth.isAdminEmail(email)) {
+          const adminProfile = await this.auth.getAdminProfile(email);
+          if ((adminProfile as any).data) {
+            const adminData = (adminProfile as any).data;
+            this.auth.profile.set({
+              usuarioid: adminData.adminid,
+              nombre: adminData.nombre,
+              apellido: adminData.apellido,
+              correo: adminData.correo,
+              cedula: adminData.cedula,
+              telefono: adminData.telefono,
+              isAdmin: true
+            });
+            console.log('AdminDashboard: Perfil cargado:', this.auth.profile());
+          }
+        }
+      }
+    } catch (error) {
+      console.error('AdminDashboard: Error cargando perfil:', error);
+    }
+  }
+
+  getInitials(): string {
+    const profile = this.userProfile();
+    if (!profile) return '';
+    const nombre = profile.nombre?.charAt(0) || '';
+    const apellido = profile.apellido?.charAt(0) || '';
+    return `${nombre}${apellido}`.toUpperCase();
   }
 
   async logout() {

@@ -8,9 +8,10 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
-    <div class="min-h-screen bg-gray-50 flex">
-      <!-- Sidebar -->
-      <aside class="w-64 bg-white shadow-lg">
+    <div class="flex">
+      <!-- Sidebar - Fixed Position -->
+      <aside class="fixed left-0 top-0 h-screen w-64 z-10 flex-shrink-0 bg-white shadow-lg flex flex-col">
+        <!-- Logo -->
         <div class="p-6">
           <div class="flex items-center space-x-3 mb-8">
             <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
@@ -33,9 +34,10 @@ import { CommonModule } from '@angular/common';
               <p class="text-xs text-gray-500">{{ userProfile()?.correo }}</p>
             </div>
           }
+        </div>
 
-          <!-- Navigation Menu -->
-          <nav class="space-y-2">
+        <!-- Navigation Menu - Scrollable -->
+        <nav class="flex-1 px-6 space-y-2 overflow-y-auto">
             <a 
               routerLink="/user-dashboard" 
               routerLinkActive="bg-blue-100 text-blue-700"
@@ -69,27 +71,28 @@ import { CommonModule } from '@angular/common';
               </svg>
               <span class="font-medium">Mis Reservas</span>
             </a>
-          </nav>
+        </nav>
 
-          <!-- Logout Button -->
-          <div class="mt-8 pt-6 border-t border-gray-200">
-            <button 
-              (click)="logout()"
-              class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-red-50 transition-colors text-red-600"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-              </svg>
-              <span class="font-medium">Cerrar Sesión</span>
-            </button>
-          </div>
+        <!-- Logout Button -->
+        <div class="p-6 pt-4 border-t border-gray-200">
+          <button 
+            (click)="logout()"
+            class="w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-red-50 transition-colors text-red-600"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            <span class="font-medium">Cerrar Sesión</span>
+          </button>
         </div>
       </aside>
 
-      <!-- Main Content Area -->
-      <main class="flex-1 overflow-auto">
-        <router-outlet></router-outlet>
-      </main>
+      <!-- Main Content Area - Offset for fixed sidebar -->
+      <div class="ml-64 flex-1 flex flex-col">
+        <main class="overflow-y-auto bg-gray-50 min-h-screen">
+          <router-outlet></router-outlet>
+        </main>
+      </div>
     </div>
   `,
   styles: []
@@ -100,11 +103,39 @@ export class UserDashboardComponent implements OnInit {
   
   userProfile = this.auth.profile;
 
-  ngOnInit() {
-    // Verificar si es usuario normal, si es admin redirigir
-    if (this.auth.isAdmin()) {
-      console.log('Redirigiendo a admin dashboard');
-      this.router.navigate(['/admin-dashboard']);
+  async ngOnInit() {
+    try {
+      // Asegurar que la sesión esté cargada
+      const session = await this.auth.getSession();
+      
+      if (!session) {
+        console.warn('No hay sesión activa');
+        this.router.navigate(['/login']);
+        return;
+      }
+
+      // Si no hay perfil cargado, intentar cargarlo
+      if (!this.auth.profile()) {
+        const userId = session.user?.id;
+        if (userId) {
+          const profileRes = await this.auth.getProfile(userId);
+          if ((profileRes as any).data) {
+            this.auth.profile.set({
+              ...(profileRes as any).data,
+              isAdmin: false
+            });
+          }
+        }
+      }
+
+      // Verificar si es admin y redirigir
+      if (this.auth.isAdmin()) {
+        console.log('Redirigiendo a admin dashboard');
+        this.router.navigate(['/admin-dashboard']);
+      }
+    } catch (error) {
+      console.error('Error en UserDashboard ngOnInit:', error);
+      this.router.navigate(['/login']);
     }
   }
 
