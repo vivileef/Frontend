@@ -152,8 +152,6 @@ create table reserva (
 - Obtener espacios por sección: `dbService.getEspacios(seccionid)`
 - Crear reserva: se inserta en `reserva` y se actualizan filas en `espaciohora` con `reservaid` y `estado=false`.
 
-## Modelo de dominio y ER (detallado)
-Incluido arriba: diagrama Mermaid con las entidades y relaciones principales. En esta sección se encuentran las columnas y claves más importantes; adáptalas según tus migraciones reales.
 
 ## Comandos útiles (desarrollo / test / build)
 - Instalar dependencias:
@@ -190,6 +188,79 @@ npx ng test
 
 ```bash
 npx ng e2e
+```
+### Entidades principales (ER) — Mermaid
+```mermaid
+erDiagram
+	INSTITUCION {
+		string institucionid PK
+		string nombre
+		string direccion
+	}
+	SECCION {
+		string seccionid PK
+		string nombre
+		string institucionid FK
+	}
+	ESPACIO {
+		string espacioid PK
+		string nombre
+		string seccionid FK
+		boolean estado
+		int capacidad
+	}
+	ESPACIOHORA {
+		string espaciohoraid PK
+		string espacioid FK
+		time horainicio
+		time horafin
+		boolean estado
+		string reservaid FK NULL
+	}
+	RESERVA {
+		string reservaid PK
+		string usuarioid FK
+		string nombrereserva
+		timestamp fechareserva
+	}
+	USUARIO {
+		string usuarioid PK
+		string nombre
+		string correo
+	}
+	COMENTARIO {
+		string comentarioid PK
+		string espacioid FK
+		string usuarioid FK
+		text contenido
+		timestamp creado_en
+	}
+	INCIDENCIA {
+		string incidenciaid PK
+		string espacioid FK
+		string usuarioid FK
+		text descripcion
+		timestamp creado_en
+	}
+	NOTIFICACION {
+		string notificacionid PK
+		string usuarioid FK
+		text mensaje
+		boolean leido
+	}
+
+	INSTITUCION ||--o{ SECCION : "tiene"
+	SECCION ||--o{ ESPACIO : "contiene"
+	ESPACIO ||--o{ ESPACIOHORA : "tiene"
+	ESPACIOHORA }o--|| ESPACIO : "pertenece a"
+	USUARIO ||--o{ RESERVA : "crea"
+	RESERVA ||--o{ ESPACIOHORA : "incluye"
+	ESPACIO ||--o{ COMENTARIO : "recibe"
+	USUARIO ||--o{ COMENTARIO : "escribe"
+	ESPACIO ||--o{ INCIDENCIA : "puede tener"
+	USUARIO ||--o{ INCIDENCIA : "reporta"
+	USUARIO ||--o{ NOTIFICACION : "recibe"
+
 ```
 
 ## Testing y calidad
