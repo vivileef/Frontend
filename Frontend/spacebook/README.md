@@ -1,59 +1,220 @@
-# Spacebook
+# SpaceBook
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.0.5.
+Este repositorio contiene la aplicación frontend de SpaceBook (Angular). Para evitar duplicación de documentación entre repositorios, la documentación de arquitectura, modelo de dominio y la guía completa se mantiene en el README del repositorio principal (padre).
 
-## Development server
+Si necesitas la documentación completa (arquitectura, ER, tablas y guía de despliegue), consulta el README del repositorio padre:
 
-To start a local development server, run:
+- https://github.com/vivileef/SPACEBOOK-Reservas-de-espacios-compartidos#arquitectura
 
-```bash
-ng serve
+## Rápido inicio local
+
+1. Instalar dependencias:
+
+```powershell
+npm install
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+2. Servir la app en desarrollo:
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
+```powershell
+npx ng serve --open
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+3. Abrir `http://localhost:4200`
 
-```bash
-ng generate --help
+## Variables de entorno mínimas
+- `VITE_SUPABASE_URL` — URL del proyecto Supabase
+- `VITE_SUPABASE_ANON_KEY` — clave pública anónima
+
+No almacenes claves privadas o `service_role` en el cliente.
+
+## Estructura breve
+- `src/app/spacebook/` — páginas principales (admin, user)
+- `src/app/shared/` — servicios y modelos
+- `src/assets/images/espacios/` — imágenes de ejemplo
+
+## Tests y build
+- Unit tests: `npx ng test`
+- Build producción: `npx ng build --configuration production`
+
+---
+
+Para detalles de arquitectura, modelo de datos (Mermaid ER), configuración de Supabase y flujos de reserva, consulta el README del repositorio padre (enlace más arriba).
+> Nota: Ajusta nombres de columnas, tipos y relaciones según el esquema real en la base de datos.
+
+## README detallado — Frontend SpaceBook
+
+Este documento describe con detalle cómo configurar, desarrollar, probar y desplegar el frontend de SpaceBook, así como la estructura del proyecto y la integración con Supabase.
+
+Índice
+- [Resumen](#resumen)
+- [Requisitos](#requisitos)
+- [Variables de entorno](#variables-de-entorno)
+- [Configurar Supabase (rápido)](#configurar-supabase-rápido)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Servicios clave y flujo de datos](#servicios-clave-y-flujo-de-datos)
+- [Comandos útiles (desarrollo/test/build)](#comandos-utiles-desarrollotestbuild)
+- [Testing y calidad](#testing-y-calidad)
+- [CI / CD (ejemplo)](#ci--cd-ejemplo)
+- [Despliegue](#despliegue)
+- [Contribuir](#contribuir)
+- [Solución de problemas comunes](#solución-de-problemas-comunes)
+
+---
+
+## Resumen
+Frontend de SpaceBook: aplicación SPA construida con Angular y TypeScript. Consume Supabase como backend (Postgres + Auth + Storage). Usa Tailwind CSS para estilos y DaisyUI para componentes utilitarios.
+
+## Requisitos
+- Node.js >= 18
+- npm o pnpm
+- Angular CLI (opcional, `npx ng ...` funciona sin instalación global)
+- Cuenta y proyecto en Supabase (para desarrollo/integración local)
+
+## Variables de entorno
+Crear un archivo `.env` o usar variables de entorno del entorno de desarrollo. Ejemplo de variables que el frontend espera (no almacenar secretos en repos públicos):
+
+```env
+VITE_SUPABASE_URL=https://xyzcompany.supabase.co
+VITE_SUPABASE_ANON_KEY=public-anon-key
+NG_APP_API_BASE_URL=https://api.example.com
 ```
 
-## Building
+Nota: la app usa `@supabase/supabase-js`. En Angular puedes pasar estas vars al construir servicios. Asegúrate de no exponer keys de servicio (`service_role`) desde el cliente.
 
-To build the project run:
+## Configurar Supabase (rápido)
+1. Crea un proyecto en https://app.supabase.com
+2. En la sección SQL, crea tablas mínimas (ejemplo simplificado):
 
-```bash
-ng build
+```sql
+create table institucion (
+	institucionid uuid primary key default uuid_generate_v4(),
+	nombre text not null,
+	direccion text
+);
+
+create table seccion (
+	seccionid uuid primary key default uuid_generate_v4(),
+	institucionid uuid references institucion(institucionid),
+	nombre text
+);
+
+create table espacio (
+	espacioid uuid primary key default uuid_generate_v4(),
+	seccionid uuid references seccion(seccionid),
+	nombre text,
+	capacidad int,
+	estado boolean default true
+);
+
+create table espaciohora (
+	espaciohoraid uuid primary key default uuid_generate_v4(),
+	espacioid uuid references espacio(espacioid),
+	horainicio time,
+	horafin time,
+	estado boolean default true,
+	reservaid uuid null
+);
+
+create table usuario (
+	usuarioid uuid primary key,
+	nombre text,
+	correo text
+);
+
+create table reserva (
+	reservaid uuid primary key default uuid_generate_v4(),
+	usuarioid uuid references usuario(usuarioid),
+	nombrereserva text,
+	fechareserva timestamptz default now()
+);
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+3. Configura RLS (Row Level Security) si usas Supabase Auth — seguir la guía oficial para tokens/roles.
 
-## Running unit tests
+## Estructura del proyecto (resumen relevante)
+- `spacebook/` — subcarpeta con la app Angular
+	- `src/app/spacebook/` — código específico del módulo SpaceBook
+		- `admin/` — vistas y pages para administración
+		- `user/` — vistas de usuario (catalogo-espacios, sistema-reservas, mis-reservas)
+		- `shared/` — servicios reutilizables, guards, modelos y utilidades
+	- `src/assets/` — imágenes y assets estáticos (e.g. `assets/images/espacios/`)
+	- `environments/` — archivos de configuración por entorno
 
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+## Servicios clave y flujo de datos
+- `SupabaseService`: encapsula la creación del cliente Supabase y configura el cliente compartido.
+- `DatabaseService`: capa de abstracción para consultas (getInstituciones, getSecciones, getEspacios, etc.).
+- `Auth` (service): wrapper de autenticación (profile(), isAdmin(), signOut()).
+- Flujo típico: componentes llaman a `DatabaseService` -> éste usa `SupabaseService.getClient()` -> realiza querys a las tablas Postgres -> actualiza señales / observables en el frontend.
+
+### Ejemplos de llamadas
+- Obtener instituciones: `dbService.getInstituciones()`
+- Obtener espacios por sección: `dbService.getEspacios(seccionid)`
+- Crear reserva: se inserta en `reserva` y se actualizan filas en `espaciohora` con `reservaid` y `estado=false`.
+
+## Modelo de dominio y ER (detallado)
+Incluido arriba: diagrama Mermaid con las entidades y relaciones principales. En esta sección se encuentran las columnas y claves más importantes; adáptalas según tus migraciones reales.
+
+## Comandos útiles (desarrollo / test / build)
+- Instalar dependencias:
 
 ```bash
-ng test
+npm install
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
+- Servir en dev (auto-reload):
 
 ```bash
-ng e2e
+npx ng serve --open
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+- Build producción:
 
-## Additional Resources
+```bash
+npx ng build --configuration production
+```
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- Lint:
+
+```bash
+npm run lint
+```
+
+- Tests unitarios (Karma / Jest según configuración):
+
+```bash
+npx ng test
+```
+
+- E2E (cypress / playwright si configurado):
+
+```bash
+npx ng e2e
+```
+
+## Testing y calidad
+- Añadir tests unitarios para servicios críticos: `DatabaseService`, `SupabaseService`, guards y componentes del flujo de reserva.
+- E2E: rutas de reserva, login, creación de reserva y verificación de estado del espacio.
+
+## CI / CD (sugerencia)
+Ejemplo básico (GitHub Actions):
+
+1. `ci.yml` que instale Node, haga `npm ci`, ejecute `npm run lint`, `npm test` y `ng build --configuration production`.
+2. Deploy: configurar action que haga deploy del `dist/` a un provider (Netlify, Vercel, GitHub Pages, S3).
+
+## Despliegue
+- Build y servir como static site en cualquier servicio estático.
+- Para integraciones con funciones o API, usar endpoints protegidos (no exponer service_role key de Supabase en frontend).
+
+## Contribuir
+- Fork & PR: clonación, rama feature, tests y PR.
+- Estilo de commits: usar mensajes claros y small atomic PRs.
+
+## Solución de problemas comunes
+- `ng serve` no arranca: verificar Node version y `npm install` completado.
+- Errores de Supabase: comprobar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` y las reglas RLS.
+- Submódulo frontend en repo padre: si clonas el repo padre recuerda `git submodule update --init --recursive`.
+
+---
+
+
